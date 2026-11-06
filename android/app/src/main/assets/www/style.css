@@ -20,7 +20,7 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #000; color:
 #dmgflash { position: absolute; inset: 0; background: rgba(200,0,0,0.35); opacity: 0; transition: opacity .35s; }
 #dmgflash.on { opacity: 1; transition: none; }
 #debug { position: absolute; left: 8px; top: 8px; font-size: 12px; line-height: 1.35; text-shadow: 1px 1px 0 #000; background: rgba(0,0,0,0.3); padding: 4px 6px; white-space: pre; }
-#toast { position: absolute; left: 50%; top: 22%; transform: translateX(-50%); font-size: 16px; text-shadow: 2px 2px 0 #000; opacity: 0; transition: opacity .5s; text-align: center; }
+#toast { white-space: pre-line; position: absolute; left: 50%; top: 18%; background: rgba(0,0,0,0.35); padding: 4px 10px; max-width: 94vw; transform: translateX(-50%); font-size: 16px; text-shadow: 2px 2px 0 #000; opacity: 0; transition: opacity .5s; text-align: center; }
 #toast.on { opacity: 1; transition: none; }
 #itemname { position: absolute; left: 50%; bottom: calc(var(--slot) * 2.6 + 16px); transform: translateX(-50%); font-size: 15px; text-shadow: 2px 2px 0 #222; opacity: 0; transition: opacity .6s; white-space: nowrap; }
 #itemname.on { opacity: 1; transition: none; }

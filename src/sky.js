@@ -67,7 +67,13 @@ export class Sky {
     this.moon.position.set(-sx * 300, -sy * 300, 0);
     this.moon.lookAt(camPos);
     const day = this.dayFactor(time);
-    this.stars.material.opacity = Math.max(0, 1 - day * 1.6);
+    const dim = this.dim || 'overworld';
+    this.sun.visible = this.moon.visible = dim === 'overworld';
+    this.stars.material.opacity = dim === 'end' ? 0.9 : dim === 'nether' ? 0 : Math.max(0, 1 - day * 1.6);
+    if (dim !== 'overworld') {
+      this.clouds.visible = false;
+      return this.color.set(dim === 'nether' ? 0x3a0c06 : 0x120a1c);
+    }
     this.stars.rotation.z = ang;
     this.clouds.visible = settings.clouds !== false;
     this.clouds.position.set(Math.floor(camPos.x / 384) * 384, 112, Math.floor(camPos.z / 384) * 384);

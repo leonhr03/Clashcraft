@@ -184,7 +184,7 @@ export class Mob {
     const night = g.dayFactor() < 0.35;
     const hostileActive = def.hostile && !p.dead && g.mode === 'survival' && (!def.neutralDay || night || this.aggro);
     // sunlight burning
-    if (def.burns && g.dayFactor() > 0.6 && !liq) {
+    if (def.burns && w.dim === 'overworld' && g.dayFactor() > 0.6 && !liq) {
       const [sky] = w.getLight(Math.floor(this.x), Math.floor(this.y + 1.5), Math.floor(this.z));
       if (sky >= 14) { this.fireTimer += dt; this.burning = true; if (this.fireTimer > 1) { this.fireTimer = 0; this.hurt(1, null); this.hurtTime = 0; } }
     }
@@ -210,7 +210,7 @@ export class Mob {
           this.attackCd = 1;
           p.hurt(def.damage, { x: this.x, z: this.z, kind: 'mob' });
         }
-        if (def.type === 'spider' || this.type === 'spider') { if (this.onGround && distP < 4 && distP > 2 && Math.random() < 0.03) { this.vy = 7; this.vx = mx * 7; this.vz = mz * 7; } }
+        if (this.def.spider) { if (this.onGround && distP < 4 && distP > 2 && Math.random() < 0.03) { this.vy = 7; this.vx = mx * 7; this.vz = mz * 7; } }
       }
       this.yaw = Math.atan2(dxp, dzp);
     } else if (this.panic > 0) {
@@ -223,7 +223,8 @@ export class Mob {
         this.target = [p.x, p.z];
       } else if (this.wanderTimer <= 0) {
         this.wanderTimer = 3 + Math.random() * 6;
-        if (Math.random() < 0.5) { const a = Math.random() * Math.PI * 2, r = 3 + Math.random() * 6; this.target = [this.x + Math.cos(a) * r, this.z + Math.sin(a) * r]; }
+        if (this.home && Math.hypot(this.x - this.home[0], this.z - this.home[1]) > 18) this.target = [this.home[0], this.home[1]];
+        else if (Math.random() < 0.5) { const a = Math.random() * Math.PI * 2, r = 3 + Math.random() * 6; this.target = [this.x + Math.cos(a) * r, this.z + Math.sin(a) * r]; }
         else this.target = null;
       }
     }
@@ -245,9 +246,9 @@ export class Mob {
     moveEntity(w, this, dt);
     if (this.onGround && preVy < -15) this.hurt(Math.floor((-preVy - 13) / 3), null);
     if (this.hitWall && this.onGround && (mx || mz)) {
-      if (this.type === 'spider') this.vy = 5; else this.vy = 8.5;
+      if (this.def.spider) this.vy = 5; else this.vy = 8.5;
     }
-    if (this.type === 'spider' && this.hitWall && (mx || mz)) this.vy = Math.max(this.vy, 3);
+    if (this.def.spider && this.hitWall && (mx || mz)) this.vy = Math.max(this.vy, 3);
     // visuals
     const sp = Math.hypot(this.vx, this.vz);
     this.walk += (Math.min(1, sp / 2) - this.walk) * Math.min(1, dt * 8);
@@ -267,7 +268,7 @@ export class Mob {
     // lighting tint
     const [sky, bl] = w.getLight(Math.floor(this.x), Math.floor(this.y + 0.5), Math.floor(this.z));
     const lv = Math.max(sky / 15 * g.dayFactor(), bl / 15);
-    const br = Math.pow(0.82, 15 * (1 - lv)) * 1.1 + 0.05;
+    const br = Math.max(Math.pow(0.82, 15 * (1 - lv)) * 1.1 + 0.05, g.ambient() * 1.6);
     for (const mat of m.mats) {
       if (this.hurtTime > 0.2) mat.color.setRGB(1.0, 0.35, 0.35);
       else mat.color.setRGB(br, br, br);
@@ -329,8 +330,10 @@ export class EntityManager {
         const e = list[i];
         // freeze entities in unloaded chunks
         if (e.kind !== 'particle' && !g.world.isLoaded(Math.floor(e.x), Math.floor(e.z))) {
-          if (e.kind === 'mob') { e.dead = true; }
-          else continue;
+          if (e.kind === 'mob') {
+            if (e.def.passive) this.park(e);
+            e.dead = true;
+          } else continue;
         }
         e.update(dt);
         if (e.kind === 'mob' && !e.dead) {
@@ -340,15 +343,54 @@ export class EntityManager {
         if (e.dead) { e.dispose(); list.splice(i, 1); }
       }
     }
-    // merge nearby items occasionally
+    // bring back mobs whose chunk is loaded again
+    const w = g.world;
+    if (w.parked.size) {
+      for (const [k, list] of w.parked) {
+        if (!w.chunks.has(k)) continue;
+        const c = w.chunks.get(k);
+        if (!c.mesh) continue;
+        w.parked.delete(k);
+        for (const [t, x, y, z, hp, extra] of list) {
+          if (!MOB_DEFS[t]) continue;
+          const m = this.spawnMob(t, x, y, z);
+          if (hp) m.hp = hp;
+          if (extra) Object.assign(m, extra);
+          if (t === 'villager' && !m.home) m.home = [x, z];
+        }
+      }
+    }
     this.spawnTimer -= dt;
     if (this.spawnTimer <= 0) { this.spawnTimer = 1; this.trySpawn(); }
+  }
+  park(m) {
+    const w = this.game.world;
+    const k = Math.floor(m.x / CS) + ',' + Math.floor(m.z / CS);
+    if (!w.parked.has(k)) w.parked.set(k, []);
+    w.parked.get(k).push([m.type, +m.x.toFixed(2), +m.y.toFixed(2), +m.z.toFixed(2), m.hp, m.home ? { home: m.home } : null]);
   }
   trySpawn() {
     const g = this.game, w = g.world, p = g.player;
     if (!g.settings.mobs) return;
-    const passive = this.mobs.filter((m) => m.def.passive).length;
-    const hostile = this.mobs.length - passive;
+    const passive = this.mobs.filter((m) => m.def.passive && !m.def.villager).length;
+    const hostile = this.mobs.filter((m) => m.def.hostile).length;
+    if (w.dim !== 'overworld') {
+      if (g.mode !== 'survival' || !g.settings.hostile || hostile >= (w.dim === 'nether' ? 12 : 6)) return;
+      for (let attempt = 0; attempt < 4; attempt++) {
+        const a = Math.random() * Math.PI * 2, r = 16 + Math.random() * 30;
+        const x = Math.floor(p.x + Math.cos(a) * r), z = Math.floor(p.z + Math.sin(a) * r);
+        if (!w.isLoaded(x, z)) continue;
+        const y = Math.floor(p.y) + Math.floor(Math.random() * 24) - 12;
+        if (y < 2 || y > 120) continue;
+        if (SOLID[w.getBlock(x, y, z)] || SOLID[w.getBlock(x, y + 1, z)] || !SOLID[w.getBlock(x, y - 1, z)]) continue;
+        if (w.getBlock(x, y, z) === B.lava || w.getBlock(x, y - 1, z) === B.lava) continue;
+        const types = w.dim === 'nether' ? (w.getBlock(x, y - 1, z) === B.glutziegel ? ['fire_skeleton', 'fire_skeleton', 'ash_zombie'] : ['ash_zombie', 'ash_zombie', 'fire_skeleton']) : ['void_crawler'];
+        if (w.dim === 'end' && Math.random() < 0.6) return;
+        this.spawnMob(types[Math.floor(Math.random() * types.length)], x + 0.5, y, z + 0.5);
+        return;
+      }
+      return;
+    }
     const day = g.dayFactor();
     for (let attempt = 0; attempt < 3; attempt++) {
       const a = Math.random() * Math.PI * 2, r = 20 + Math.random() * 28;
@@ -396,11 +438,19 @@ export class EntityManager {
     return best ? { mob: best, dist: bd } : null;
   }
   serialize() {
-    return this.mobs.filter((m) => m.def.passive).map((m) => [m.type, +m.x.toFixed(2), +m.y.toFixed(2), +m.z.toFixed(2), m.hp]);
+    const out = this.mobs.filter((m) => m.def.passive && !m.dead).map((m) => [m.type, +m.x.toFixed(2), +m.y.toFixed(2), +m.z.toFixed(2), m.hp, m.home ? { home: m.home } : null]);
+    for (const list of this.game.world.parked.values()) out.push(...list);
+    return out;
   }
   load(arr) {
     if (!arr) return;
-    for (const [t, x, y, z, hp] of arr) if (MOB_DEFS[t]) { const m = this.spawnMob(t, x, y, z); m.hp = hp; }
+    const w = this.game.world;
+    for (const e of arr) {
+      if (!MOB_DEFS[e[0]]) continue;
+      const k = Math.floor(e[1] / CS) + ',' + Math.floor(e[3] / CS);
+      if (!w.parked.has(k)) w.parked.set(k, []);
+      w.parked.get(k).push(e);
+    }
   }
 }
 

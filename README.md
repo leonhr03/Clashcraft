@@ -14,6 +14,12 @@ Alle Texturen, Mobs und Sounds werden prozedural im Code erzeugt – es werden k
 - Tag-/Nacht-Zyklus mit Sonne, Mond, Sternen, Wolken; Licht von Fackeln, Laternen, Lava (weiche Beleuchtung + Umgebungsverdeckung)
 - Ackerbau (Hacke, Weizen, Knochenmehl), wachsende Setzlinge, Zuckerrohr, Kakteen
 - Wasser- und Lavafluss, fallender Sand/Kies
+- Dschungel-Biom mit hohen Tropenbäumen und Büschen
+- Bauwerke (eigene Designs): Dörfer mit Häusern, Feldern, Schmiede, Brunnen und Dorfbewohnern (Ebene, Wüste, Taiga),
+  Wüstentempel mit verstecktem Schatzraum, Dschungeltempel mit Keller, Untergrundfestung mit Bibliothek, Brunnenraum und Portalraum
+- Unterwelt (Glutportal: 8 Obsidian + Leuchtkristall): Glutgestein, Aschesand, Lavameere, Glutquarz, Glutfestungen mit Brücken und Türmen
+- Leere (Portal in der Untergrundfestung): schwebende Inseln, Rückkehrportal, Sternenstädte mit wertvoller Beute
+- Entdeckerkompass (Eisen + Lapis): zeigt Entfernung und Richtung zu den nächsten Bauwerken
 - Speichern mehrerer Welten (automatisch)
 - Touch-Steuerung: Joystick links, Umsehen rechts wischen, Tippen = Benutzen/Platzieren/Angreifen, Halten = Abbauen
 

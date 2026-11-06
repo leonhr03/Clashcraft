@@ -70,9 +70,9 @@ export class UI {
   hideLoading() { $('loading').classList.add('hidden'); }
   loadingProgress(f) { $('loadbar').style.width = Math.min(100, f * 100).toFixed(0) + '%'; }
 
-  toast(msg) {
+  toast(msg, ms = 2500) {
     const t = $('toast'); t.textContent = msg; t.classList.add('on');
-    clearTimeout(this._tt); this._tt = setTimeout(() => t.classList.remove('on'), 2500);
+    clearTimeout(this._tt); this._tt = setTimeout(() => t.classList.remove('on'), ms);
   }
   flashDamage() { const d = $('dmgflash'); d.classList.add('on'); setTimeout(() => d.classList.remove('on'), 80); }
   toggleDebug() { this.debugOn = !this.debugOn; $('debug').classList.toggle('hidden', !this.debugOn); }

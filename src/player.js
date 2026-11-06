@@ -64,6 +64,8 @@ export class Player {
     this.headInLava = headBlock === B.lava;
     let speed = this.flying ? (this.sprinting ? 21 : 11) : this.sprinting ? 5.6 : this.sneaking ? 1.3 : 4.3;
     if (liq) speed *= 0.5;
+    const under = w.getBlock(Math.floor(this.x), Math.floor(this.y - 0.1), Math.floor(this.z));
+    if (BLOCKS[under] && BLOCKS[under].slow && !this.flying) speed *= 0.55;
     const sin = Math.sin(this.yaw), cos = Math.cos(this.yaw);
     // forward is -z in camera space; yaw rotates around Y
     const mx = (-sin * fwd + cos * str) * speed;
@@ -134,6 +136,16 @@ export class Player {
       this.exhaustion += moved * (this.sprinting ? 0.1 : 0.01);
     }
     if (liq === 'lava') this.hurt(4, { kind: 'lava' });
+    // portals
+    const fb = w.getBlock(Math.floor(this.x), Math.floor(this.y + 0.3), Math.floor(this.z));
+    const bb = w.getBlock(Math.floor(this.x), Math.floor(this.y + 1.2), Math.floor(this.z));
+    const portalId = BLOCKS[fb].portal ? fb : BLOCKS[bb].portal ? bb : 0;
+    if (portalId) {
+      if (!this.portalCooldown) {
+        this.portalTime = (this.portalTime || 0) + dt;
+        if (this.portalTime > (creative ? 0.3 : 1.2)) { this.portalTime = 0; this.portalCooldown = true; g.usePortal(portalId); }
+      }
+    } else { this.portalTime = 0; this.portalCooldown = false; }
     // cactus damage
     for (const [dx, dz] of [[0.35, 0], [-0.35, 0], [0, 0.35], [0, -0.35]]) {
       if (w.getBlock(Math.floor(this.x + dx), Math.floor(this.y + 0.5), Math.floor(this.z + dz)) === B.cactus) { this.hurt(1, { kind: 'cactus' }); break; }

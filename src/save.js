@@ -63,7 +63,7 @@ export async function deleteWorld(worldId) {
   const d = await db();
   await new Promise((res) => {
     const t = d.transaction('chunks', 'readwrite');
-    t.objectStore('chunks').delete(IDBKeyRange.bound(worldId + ':', worldId + ':￿'));
+    for (const id of [worldId, worldId + '~nether', worldId + '~end']) t.objectStore('chunks').delete(IDBKeyRange.bound(id + ':', id + ':\uffff'));
     t.oncomplete = res; t.onerror = res;
   });
 }

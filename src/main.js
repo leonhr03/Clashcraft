@@ -95,7 +95,8 @@ async function startWorld(meta) {
   show(null);
   $('loading').classList.remove('hidden');
   let chunks = new Map();
-  try { chunks = await loadChunks(meta.id); } catch (e) { console.warn(e); }
+  const store = meta.dim && meta.dim !== 'overworld' ? meta.id + '~' + meta.dim : meta.id;
+  try { chunks = await loadChunks(store); } catch (e) { console.warn(e); }
   if (!game) game = new Game($('game'), ui, settings);
   window.__game = game;
   game.start(meta, chunks);

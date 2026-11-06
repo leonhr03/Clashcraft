@@ -21,9 +21,12 @@ export class Chunk {
 export const idx = (x, y, z) => (y * CS + z) * CS + x;
 
 export class World {
-  constructor(seed, savedChunks) {
+  constructor(seed, savedChunks, dim = 'overworld') {
     this.seed = seed;
-    this.gen = new WorldGen(seed);
+    this.dim = dim;
+    this.gen = new WorldGen(seed, dim);
+    this.parked = new Map();      // chunk key -> [[type,x,y,z,hp,extra]] mobs waiting for their chunk
+    this.spawnedKeys = new Set(); // structures whose inhabitants were already spawned
     this.chunks = new Map();
     this.saved = savedChunks || new Map(); // key -> Uint8Array (modified chunks)
     this.tile = new Map(); // "x,y,z" -> tile entity data (chest, furnace)
@@ -40,7 +43,20 @@ export class World {
     c = new Chunk(cx, cz);
     const saved = this.saved.get(k);
     if (saved) { c.blocks.set(saved); c.modified = true; }
-    else this.gen.generate(c);
+    else {
+      this.gen.generate(c);
+      if (c.pendingTiles) { for (const [k, t] of c.pendingTiles) if (!this.tile.has(k)) this.tile.set(k, t); c.pendingTiles = null; }
+      if (c.pendingMobs) {
+        for (const m of c.pendingMobs) {
+          const sk = m.sid + '@' + m.type + '@' + Math.floor(m.x) + ',' + Math.floor(m.z);
+          if (this.spawnedKeys.has(sk)) continue;
+          this.spawnedKeys.add(sk);
+          if (!this.parked.has(k)) this.parked.set(k, []);
+          this.parked.get(k).push([m.type, m.x, m.y, m.z, null]);
+        }
+        c.pendingMobs = null;
+      }
+    }
     c.generated = true;
     this.chunks.set(k, c);
     // neighbours need relight/remesh at borders

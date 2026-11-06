@@ -464,6 +464,7 @@ for (let s = 0; s < 10; s++) {
   };
 }
 
+// (late tiles appended below)
 // ---------- item sprite painters ----------
 const STICK = hex('#7a5530');
 function handle(p, x1 = 10.5, y1 = 5.5) { p.line(2.5, 13.5, x1, y1, 1.7, STICK); }
@@ -523,6 +524,55 @@ IP.egg = (p) => { p.circle(8, 9, 4.2, hex('#f2e2c0'), 0.04); p.circle(8, 6.5, 3,
 const dye = (c) => (p) => { p.circle(8, 10, 4.4, c, 0.1); p.circle(8, 6.5, 2.6, shade(c, 1.15), 0.1); };
 IP.red_dye = dye(hex('#c8281e')); IP.yellow_dye = dye(hex('#f0c820')); IP.green_dye = dye(hex('#4f7a1e')); IP.black_dye = dye(hex('#222226'));
 IP.orange_dye = dye(hex('#f07a1a')); IP.purple_dye = dye(hex('#8a2ab8')); IP.blue_dye = dye(hex('#2a42c0'));
+
+
+// ---- new biome / structure / dimension tiles ----
+P.jungle_log = (p) => { logSide(p, hex('#5a4524'), hex('#3c2c14')); for (let i = 0; i < 6; i++) p.rect(Math.floor(p.r() * 15), Math.floor(p.r() * 15), 1, 2, hex('#4f6a2a')); };
+P.jungle_log_top = (p) => logTop(p, hex('#b07a4e'), hex('#5a4524'));
+P.jungle_leaves = (p) => leaves(p, hex('#2f9a20'));
+P.jungle_planks = (p) => planks(p, hex('#a8704a'));
+P.jungle_sapling = (p) => sapling(p, hex('#2f9a20'), hex('#5a4524'));
+P.dirt_path_top = (p) => p.noise(hex('#9a7a44'), 0.07).specks(hex('#b0905a'), 18).specks(hex('#7a5e30'), 12);
+P.dirt_path_side = (p) => { P.dirt(p); p.rect(0, 0, 16, 2, hex('#9a7a44'), 0.07); };
+P.glutgestein = (p) => { p.noise(hex('#6e2a26'), 0.1).blobs([hex('#5a1e1c'), hex('#85342e')], 10, 0.6, 1.5).specks(hex('#9a4038'), 8); };
+P.aschesand = (p) => { p.noise(hex('#4f3e33'), 0.12).specks(hex('#3a2c24'), 30).specks(hex('#6a5646'), 12); };
+P.glutquarz_erz = (p) => { P.glutgestein(p); p.ore(hex('#ece4d8'), hex('#c8bca8'), 6); };
+P.glutziegel = (p) => {
+  p.noise(hex('#2a1214'), 0.05);
+  for (let row = 0; row < 4; row++) { const off = row % 2 ? 4 : 0; for (let b = -1; b < 3; b++) p.rect(b * 8 + off + 1, row * 4, 7, 3, hex('#4a1c20'), 0.1); }
+};
+P.glutzaun = (p) => { p.clear(); p.rect(2, 0, 3, 16, hex('#4a1c20'), 0.08); p.rect(11, 0, 3, 16, hex('#4a1c20'), 0.08); p.rect(0, 3, 16, 2, hex('#3a1418'), 0.06); p.rect(0, 10, 16, 2, hex('#3a1418'), 0.06); };
+P.glutpilz = (p) => plant(p, () => { p.rect(7, 9, 2, 6, hex('#5a2a1a')); p.circle(8, 8, 4, hex('#e0541e'), 0.15); p.set(6, 6, hex('#ffd060')); p.set(9, 7, hex('#ffd060')); p.rect(3, 10, 10, 1, T); p.rect(7, 9, 2, 6, hex('#5a2a1a')); });
+P.leerenstein = (p) => p.noise(hex('#d9d6a2'), 0.06).specks(hex('#c2bd84'), 22).specks(hex('#ece9c0'), 10);
+P.leerenstein_ziegel = (p) => {
+  p.noise(hex('#b8b48a'), 0.04);
+  for (let row = 0; row < 2; row++) { const off = row ? 4 : 0; for (let b = -1; b < 2; b++) p.rect(b * 8 + off + 1, row * 8 + 1, 7, 6, hex('#dedaa8'), 0.05); }
+};
+P.sternenziegel = (p) => { p.noise(hex('#9a7ab8'), 0.05); for (let y = 0; y < 16; y += 4) p.rect(0, y, 16, 1, hex('#7a5a9a')); for (let y = 0; y < 16; y += 4) p.rect((y / 4) % 2 ? 4 : 12, y, 1, 4, hex('#7a5a9a')); };
+P.sternensaeule = (p) => { p.noise(hex('#a684c4'), 0.04); for (const x of [0, 5, 10, 15]) p.rect(x, 0, 1, 16, hex('#80609e')); };
+P.sternensaeule_top = (p) => { p.noise(hex('#a684c4'), 0.04); p.border(hex('#80609e')); p.rect(5, 5, 6, 6, hex('#b898d6'), 0.04); };
+P.glutportal = (p) => {
+  for (let y = 0; y < TS; y++) for (let x = 0; x < TS; x++) {
+    const a = Math.atan2(y - 7.5, x - 7.5), d = Math.hypot(x - 7.5, y - 7.5);
+    const w = Math.sin(a * 3 + d * 0.9) * 0.5 + 0.5;
+    p.set(x, y, mix(hex('#8a1a0a'), hex('#ffb040'), w * 0.8 + p.r() * 0.2));
+  }
+};
+P.leerenportal = (p) => {
+  p.noise(hex('#0c0618'), 0.2);
+  for (let i = 0; i < 14; i++) p.set(Math.floor(p.r() * 16), Math.floor(p.r() * 16), [p.r() < 0.5 ? hex('#7ae0d0') : hex('#d8b0ff')][0]);
+};
+P.leerenrahmen_side = (p) => { P.leerenstein(p); p.rect(0, 0, 16, 4, hex('#2f6a5a'), 0.08); p.rect(0, 3, 16, 1, hex('#1f4a3e')); };
+P.leerenrahmen_top = (p) => { p.noise(hex('#2f6a5a'), 0.08); p.border(hex('#1f4a3e')); p.rect(5, 5, 6, 6, hex('#7ae0d0'), 0.1); p.rect(6, 6, 4, 4, hex('#0c0618')); };
+P.chiseled_sandstone = (p) => {
+  p.noise(hex('#d6c88d'), 0.04);
+  p.rect(0, 0, 16, 2, hex('#c3b278')); p.rect(0, 14, 16, 2, hex('#c3b278'));
+  p.rect(4, 4, 8, 8, hex('#c3b278')); p.rect(6, 6, 4, 4, hex('#d6c88d')); p.rect(7, 7, 2, 2, hex('#a8955e'));
+};
+P.mossy_stone_bricks = (p) => { P.stone_bricks(p); p.blobs([hex('#4f7a2e'), hex('#5f8f37')], 7, 0.8, 1.8); };
+P.cracked_stone_bricks = (p) => { P.stone_bricks(p); p.line(3, 1, 7, 7, 1, hex('#3a3a3e')); p.line(7, 7, 6, 14, 1, hex('#3a3a3e')); p.line(10, 9, 14, 12, 1, hex('#3a3a3e')); };
+IP.quartz = (p) => { p.poly([[4, 13], [3, 6], [7, 2], [11, 4], [13, 11], [9, 14]], hex('#ece4d8'), 0.05); p.line(6, 5, 9, 11, 1, hex('#ffffff')); };
+IP.explorer_compass = (p) => { p.circle(8, 8, 6.2, hex('#9a9a9a'), 0.04); p.circle(8, 8, 4.8, hex('#e8e2cc'), 0.03); p.poly([[8, 3.5], [9.3, 8], [6.7, 8]], hex('#d02a1e')); p.poly([[8, 12.5], [9.3, 8], [6.7, 8]], hex('#3a3a3a')); };
 
 function paintItem(p, def) {
   if (IP[def.key]) { p.clear(); IP[def.key](p); p.outline(); return; }

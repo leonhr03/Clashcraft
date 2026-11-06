@@ -10,8 +10,14 @@ import { raycast, rayBox, collides } from './physics.js';
 import { Sky } from './sky.js';
 import { SMELT } from './recipes.js';
 import { sfx, initAudio } from './audio.js';
-import { saveWorldMeta, saveChunks } from './save.js';
+import { saveWorldMeta, saveChunks, loadChunks } from './save.js';
 import { SEA } from './worldgen.js';
+
+export const DIMS = {
+  overworld: { name: 'Oberwelt', fixedDay: null, amb: 0.03, ambCol: [1, 1, 1] },
+  nether: { name: 'Unterwelt', fixedDay: 0, amb: 0.3, ambCol: [1, 0.72, 0.6], fog: 0x3a0c06 },
+  end: { name: 'Leere', fixedDay: 0.55, amb: 0.12, ambCol: [0.85, 0.8, 1], fog: 0x120a1c },
+};
 
 const VERT = `
 attribute vec3 lt;
@@ -28,7 +34,8 @@ const FRAG = `
 uniform sampler2D map;
 uniform float uDay;
 uniform vec3 uFog;
-uniform float uFogNear, uFogFar, uAlpha, uAlphaTest;
+uniform float uFogNear, uFogFar, uAlpha, uAlphaTest, uAmb;
+uniform vec3 uAmbCol;
 varying vec2 vUv;
 varying vec3 vLt;
 varying float vDist;
@@ -40,7 +47,7 @@ void main(){
   float ls = pow(0.82, 15.0*(1.0-sky));
   float lb = pow(0.82, 15.0*(1.0-bl));
   vec3 light = max(vec3(ls), vec3(lb)*vec3(1.0,0.9,0.75));
-  light = max(light, vec3(0.03));
+  light = max(light, uAmbCol * uAmb);
   vec3 col = c.rgb * light * vLt.z;
   float f = clamp((vDist - uFogNear)/(uFogFar-uFogNear), 0.0, 1.0);
   gl_FragColor = vec4(mix(col, uFog, f), c.a * uAlpha);
@@ -75,6 +82,7 @@ export class Game {
     const uniforms = () => ({
       map: { value: this.atlasTex }, uDay: { value: 1 }, uFog: { value: new THREE.Color() },
       uFogNear: { value: 40 }, uFogFar: { value: 60 }, uAlpha: { value: 1 }, uAlphaTest: { value: 0.5 },
+      uAmb: { value: 0.03 }, uAmbCol: { value: new THREE.Color(1, 1, 1) },
     });
     this.solidMat = new THREE.ShaderMaterial({ vertexShader: VERT, fragmentShader: FRAG, uniforms: uniforms() });
     this.waterMat = new THREE.ShaderMaterial({ vertexShader: VERT, fragmentShader: FRAG, uniforms: uniforms(), transparent: true, depthWrite: false, side: THREE.DoubleSide });
@@ -120,15 +128,19 @@ export class Game {
     this.resize();
   }
 
-  dayFactor() { return this.sky.dayFactor(this.time); }
+  dayFactor() { const d = DIMS[this.dim || 'overworld']; return d.fixedDay !== null ? d.fixedDay : this.sky.dayFactor(this.time); }
+  ambient() { return DIMS[this.dim || 'overworld'].amb; }
+  chunkStore(dim = this.dim) { return dim === 'overworld' ? this.meta.id : this.meta.id + '~' + dim; }
 
   // ------------- world lifecycle -------------
   start(meta, savedChunks) {
     this.meta = meta;
     this.mode = meta.mode;
-    this.world = new World(meta.seed, savedChunks);
-    this.world.onBlockChange = (x, y, z, old, id) => this.onBlockChange(x, y, z, old, id);
-    for (const [k, v] of Object.entries(meta.tiles || {})) this.world.tile.set(k, v);
+    this.dim = meta.dim || 'overworld';
+    if (!meta.tilesByDim) meta.tilesByDim = { overworld: meta.tiles || {} };
+    if (!meta.mobsByDim) meta.mobsByDim = { overworld: meta.mobs || [] };
+    if (!meta.spawnedByDim) meta.spawnedByDim = {};
+    this.createWorld(savedChunks);
     this.time = meta.time ?? 0.05;
     this.player = new Player(this);
     this.ents = new EntityManager(this);
@@ -142,12 +154,101 @@ export class Game {
         // nothing: survival starts empty like a real adventure
       }
     }
-    this.pendingMobs = meta.mobs || null;
+    this.ents.load(meta.mobsByDim[this.dim]);
     this.ready = false;
     this.running = true;
     this.lastFrame = performance.now();
     this.ui.attach(this);
     requestAnimationFrame((t) => this.frame(t));
+  }
+
+  createWorld(savedChunks) {
+    const meta = this.meta;
+    this.world = new World(meta.seed, savedChunks, this.dim);
+    this.world.onBlockChange = (x, y, z, old, id) => this.onBlockChange(x, y, z, old, id);
+    for (const [k, v] of Object.entries(meta.tilesByDim[this.dim] || {})) this.world.tile.set(k, v);
+    for (const k of meta.spawnedByDim[this.dim] || []) this.world.spawnedKeys.add(k);
+    this.flow = new Map(); this.fluidQueue = [];
+    this._order = null;
+  }
+
+  // ------------- dimensions -------------
+  usePortal(id) {
+    if (this.switching) return;
+    const p = this.player;
+    if (id === B.glutportal) {
+      if (this.dim === 'overworld') this.changeDimension('nether', Math.floor(p.x / 8) + 0.5, Math.floor(p.z / 8) + 0.5, 'portal');
+      else if (this.dim === 'nether') this.changeDimension('overworld', Math.floor(p.x * 8) + 0.5, Math.floor(p.z * 8) + 0.5, 'portal');
+    } else if (id === B.leerenportal) {
+      if (this.dim === 'end') { const sp = p.spawn || [0.5, 80, 0.5]; this.changeDimension('overworld', sp[0], sp[2], 'spawn'); }
+      else this.changeDimension('end', 0.5, 6.5, 'end');
+    }
+  }
+
+  async changeDimension(dim, x, z, arrival) {
+    if (this.switching) return;
+    this.switching = true;
+    this.ready = false;
+    this.ui.showLoading();
+    this.ui.closeScreen();
+    await this.save();
+    for (const c of this.world.chunks.values()) this.disposeChunkMesh(c);
+    this.ents.clear();
+    let saved = new Map();
+    try { saved = await loadChunks(this.chunkStore(dim)); } catch (e) { console.warn(e); }
+    this.dim = dim;
+    this.meta.dim = dim;
+    this.createWorld(saved);
+    this.ents.load(this.meta.mobsByDim[dim]);
+    const p = this.player;
+    p.x = x; p.z = z; p.y = 100; p.vx = p.vy = p.vz = 0; p.fallStart = null; p.flying = this.mode === 'creative' && p.flying;
+    p.portalCooldown = true;
+    this.arrival = arrival;
+    this.mining = null; this.crack.visible = false;
+    this.switching = false;
+    this.ui.toast(DIMS[dim].name);
+  }
+
+  // place player safely after a dimension change (chunks around are loaded)
+  handleArrival() {
+    const w = this.world, p = this.player;
+    const kind = this.arrival; this.arrival = null;
+    const free = (x, y, z) => !SOLID[w.getBlock(x, y, z)] && !SOLID[w.getBlock(x, y + 1, z)] && w.getBlock(x, y, z) !== B.lava && w.getBlock(x, y + 1, z) !== B.lava;
+    const ground = (x, y, z) => SOLID[w.getBlock(x, y - 1, z)];
+    let spot = null;
+    const bx = Math.floor(p.x), bz = Math.floor(p.z);
+    if (kind === 'end') {
+      const e = w.gen.endColumn(0, 6);
+      spot = [0, (e ? e.top : 58) + 1, 6];
+    } else if (this.dim === 'nether') {
+      // existing portal nearby?
+      search: for (let r = 0; r < 10; r++) for (let dx = -r; dx <= r; dx++) for (let dz = -r; dz <= r; dz++) {
+        if (Math.max(Math.abs(dx), Math.abs(dz)) !== r) continue;
+        for (let y = 33; y < 110; y++) if (free(bx + dx, y, bz + dz) && ground(bx + dx, y, bz + dz)) { spot = [bx + dx, y, bz + dz]; break search; }
+      }
+      if (!spot) {
+        spot = [bx, 64, bz];
+        for (let dx = -2; dx <= 2; dx++) for (let dz = -2; dz <= 2; dz++) { w.setBlock(bx + dx, 63, bz + dz, B.obsidian); for (let y = 64; y < 67; y++) w.setBlock(bx + dx, y, bz + dz, 0); }
+      }
+    } else {
+      const y = w.surfaceY(bx, bz) + 1;
+      spot = [bx, y, bz];
+      if (!free(bx, y, bz)) { w.setBlock(bx, y, bz, 0); w.setBlock(bx, y + 1, bz, 0); }
+    }
+    p.x = spot[0] + 0.5; p.y = spot[1]; p.z = spot[2] + 0.5;
+    if (kind === 'portal') {
+      // build a return portal next to the player (unless one exists close by)
+      let has = false;
+      for (let dx = -4; dx <= 4 && !has; dx++) for (let dz = -4; dz <= 4 && !has; dz++) for (let dy = -3; dy <= 3; dy++) if (w.getBlock(spot[0] + dx, spot[1] + dy, spot[2] + dz) === B.glutportal) { has = true; break; }
+      if (!has) {
+        const px = spot[0] + 2, pz = spot[2];
+        w.setBlock(px, spot[1] - 1, pz, B.obsidian);
+        w.setBlock(px, spot[1], pz, B.glutportal); w.setBlock(px, spot[1] + 1, pz, B.glutportal);
+        w.setBlock(px, spot[1] + 2, pz, B.obsidian);
+        for (const dz of [-1, 1]) for (let dy = -1; dy <= 2; dy++) w.setBlock(px, spot[1] + dy, pz + dz, B.obsidian);
+      }
+    }
+    this.flushEdits();
   }
 
   stop() {
@@ -164,11 +265,15 @@ export class Game {
     this.dirtySave.clear();
     const tiles = {};
     for (const [k, v] of this.world.tile) tiles[k] = v;
+    this.meta.tilesByDim[this.dim] = tiles;
+    this.meta.mobsByDim[this.dim] = this.ents.serialize();
+    this.meta.spawnedByDim[this.dim] = [...this.world.spawnedKeys];
+    delete this.meta.tiles; delete this.meta.mobs;
     Object.assign(this.meta, {
-      time: this.time, mode: this.mode, lastPlayed: Date.now(), player: this.player.serialize(), tiles, mobs: this.ents.serialize(),
+      time: this.time, mode: this.mode, lastPlayed: Date.now(), player: this.player.serialize(), dim: this.dim,
     });
     try {
-      await saveChunks(this.meta.id, entries);
+      await saveChunks(this.chunkStore(), entries);
       await saveWorldMeta(this.meta);
     } catch (e) { console.warn('save failed', e); }
   }
@@ -252,9 +357,9 @@ export class Game {
         this.ready = true;
         // make sure player is not stuck inside terrain
         const pl = this.player;
-        if (!this.meta.player) { pl.y = w.surfaceY(Math.floor(pl.x), Math.floor(pl.z)) + 1.01; }
+        if (this.arrival) this.handleArrival();
+        else if (!this.meta.player) { pl.y = w.surfaceY(Math.floor(pl.x), Math.floor(pl.z)) + 1.01; }
         while (collides(w, pl.x - 0.3, pl.y, pl.z - 0.3, pl.x + 0.3, pl.y + 1.8, pl.z + 0.3) && pl.y < CH) pl.y += 1;
-        if (this.pendingMobs) { this.ents.load(this.pendingMobs); this.pendingMobs = null; }
         this.ui.hideLoading();
       } else this.ui.loadingProgress(w.chunks.size / ((2 * R + 3) ** 2));
     }
@@ -384,7 +489,7 @@ export class Game {
         }
       } else if (id >= B.wheat_0 && id < B.wheat_3) {
         if (w.getBlock(x, y - 1, z) === B.farmland && Math.random() < 0.35) w.setBlock(x, y, z, id + 1);
-      } else if (id === B.oak_sapling || id === B.birch_sapling || id === B.spruce_sapling) {
+      } else if (id === B.oak_sapling || id === B.birch_sapling || id === B.spruce_sapling || id === B.jungle_sapling) {
         if (Math.random() < 0.15) this.growTree(x, y, z, id);
       } else if ((id === B.sugar_cane || id === B.cactus) && above === 0) {
         let h = 1; while (w.getBlock(x, y - h, z) === id) h++;
@@ -395,7 +500,7 @@ export class Game {
 
   growTree(x, y, z, sap) {
     const w = this.world;
-    const type = sap === B.birch_sapling ? 'birch' : sap === B.spruce_sapling ? 'spruce' : 'oak';
+    const type = sap === B.birch_sapling ? 'birch' : sap === B.spruce_sapling ? 'spruce' : sap === B.jungle_sapling ? 'jungle' : 'oak';
     const height = type === 'spruce' ? 6 + Math.floor(Math.random() * 3) : 4 + Math.floor(Math.random() * 3);
     for (let k = 1; k <= height; k++) if (SOLID[w.getBlock(x, y + k, z)]) return false;
     w.setBlock(x, y, z, 0);
@@ -614,6 +719,19 @@ export class Game {
       }
       return;
     }
+    if (hd.compass) {
+      const list = this.world.gen.structures.nearest(p.x, p.z);
+      if (!list.length) { this.ui.toast('Keine Bauwerke in dieser Dimension bekannt.'); return; }
+      const DIR = ['Norden', 'Nordosten', 'Osten', 'Südosten', 'Süden', 'Südwesten', 'Westen', 'Nordwesten'];
+      const lines = list.slice(0, 5).map((st) => {
+        const a = Math.atan2(st.x - p.x, -(st.z - p.z));
+        const d = DIR[((Math.round(a / (Math.PI / 4)) % 8) + 8) % 8];
+        return `${st.name}: ${Math.round(st.dist)} Blöcke Richtung ${d} (X ${st.x}, Z ${st.z})`;
+      });
+      this.ui.toast(lines.join('\n'), 7000);
+      this.swing = 1;
+      return;
+    }
     if (hd.bow) {
       const hasArrow = this.mode === 'creative' || p.inv.count(I.arrow) > 0;
       if (!hasArrow) return;
@@ -629,11 +747,13 @@ export class Game {
     if (hd.toolType === 'hoe' && (id === B.grass || id === B.dirt) && !w.getBlock(x, y + 1, z)) {
       w.setBlock(x, y, z, B.farmland); sfx.step('dirt'); this.damageHeld(1); this.swing = 1; this.flushEdits(); return;
     }
-    if (hd.toolType === 'shovel' && id === B.grass && !w.getBlock(x, y + 1, z)) { /* path not implemented */ }
+    if (hd.toolType === 'shovel' && (id === B.grass || id === B.dirt) && !SOLID[w.getBlock(x, y + 1, z)]) {
+      w.setBlock(x, y, z, B.dirt_path); sfx.step('dirt'); this.damageHeld(1); this.swing = 1; this.flushEdits(); return;
+    }
     if (hd.fertilizer) {
       let used = false;
       if (id >= B.wheat_0 && id < B.wheat_3) { w.setBlock(x, y, z, Math.min(B.wheat_3, id + 1 + Math.floor(Math.random() * 2))); used = true; }
-      else if (id === B.oak_sapling || id === B.birch_sapling || id === B.spruce_sapling) { if (Math.random() < 0.45) this.growTree(x, y, z, id); used = true; }
+      else if (id === B.oak_sapling || id === B.birch_sapling || id === B.spruce_sapling || id === B.jungle_sapling) { if (Math.random() < 0.45) this.growTree(x, y, z, id); used = true; }
       else if (id === B.grass) {
         for (let i = 0; i < 12; i++) {
           const tx = x + Math.floor(Math.random() * 7) - 3, tz = z + Math.floor(Math.random() * 7) - 3;
@@ -747,6 +867,7 @@ export class Game {
     const sp = p.spawn || [0.5, 80, 0.5];
     p.x = sp[0]; p.y = sp[1]; p.z = sp[2];
     p.vx = p.vy = p.vz = 0; p.hp = 20; p.food = 20; p.sat = 5; p.air = 10; p.dead = false; p.fallStart = null;
+    if (this.dim !== 'overworld') { this.changeDimension('overworld', sp[0], sp[2], 'spawn'); this.ui.dirty = true; return; }
     this.ready = false;
     this.meta.player = null; // trigger spawn surface search
     this.ui.showLoading();
@@ -781,7 +902,7 @@ export class Game {
     this.hand.rotation.set(-s * 0.9, s * 0.5 + (this.eating > 0 ? 0.6 : 0), 0);
     const [sky, bl] = this.world.getLight(Math.floor(p.x), Math.floor(p.y + 1.5), Math.floor(p.z));
     const lv = Math.max(sky / 15 * this.dayFactor(), bl / 15);
-    this.handLight.intensity = Math.pow(0.82, 15 * (1 - lv)) * 1.0 + 0.1;
+    this.handLight.intensity = Math.max(Math.pow(0.82, 15 * (1 - lv)) * 1.0 + 0.1, this.ambient() * 1.8);
   }
 
   // ------------- main loop -------------
@@ -794,8 +915,8 @@ export class Game {
     if (this.fpsAcc > 1) { this.fps = Math.round(this.fpsN / this.fpsAcc); this.fpsAcc = 0; this.fpsN = 0; }
     const input = this.ui.input;
     input.poll();
-    this.updateChunks(this.ready ? 6 : 30);
-    const active = this.ready && !this.paused;
+    if (!this.switching) this.updateChunks(this.ready ? 6 : 30);
+    const active = this.ready && !this.paused && !this.switching;
     const p = this.player;
     if (active) {
       // look
@@ -835,16 +956,20 @@ export class Game {
     const fovT = (this.settings.fov || 75) + (p.sprinting ? 8 : 0);
     if (Math.abs(this.camera.fov - fovT) > 0.1) { this.camera.fov += (fovT - this.camera.fov) * Math.min(1, dt * 8); this.camera.updateProjectionMatrix(); }
     // sky & fog
+    this.sky.dim = this.dim;
     const skyCol = this.sky.update(this.camera.position, this.time, dt, this.settings);
     const day = this.dayFactor();
+    const D = DIMS[this.dim];
     let fogCol = skyCol.clone(), near = (this.settings.renderDist || 4) * CS * 0.6, far = (this.settings.renderDist || 4) * CS * 0.95;
+    if (D.fog !== undefined) { fogCol = new THREE.Color(D.fog); if (this.dim === 'nether') { near = 8; far = Math.min(far, 64); } }
     if (p.headInWater) { fogCol = new THREE.Color(0x1a3a8a).multiplyScalar(0.3 + day * 0.7); near = 1; far = 18; }
     if (p.headInLava) { fogCol = new THREE.Color(0xd04010); near = 0; far = 2; }
     // darker fog underground
-    if (p.y < SEA - 10) { const [sky] = this.world.getLight(Math.floor(p.x), Math.floor(p.y + 1.6), Math.floor(p.z)); if (sky < 4) fogCol.multiplyScalar(0.25); }
+    if (this.dim === 'overworld' && p.y < SEA - 10) { const [sky] = this.world.getLight(Math.floor(p.x), Math.floor(p.y + 1.6), Math.floor(p.z)); if (sky < 4) fogCol.multiplyScalar(0.25); }
     this.renderer.setClearColor(fogCol);
     for (const m of [this.solidMat, this.waterMat]) {
       m.uniforms.uDay.value = day; m.uniforms.uFog.value.copy(fogCol); m.uniforms.uFogNear.value = near; m.uniforms.uFogFar.value = far;
+      m.uniforms.uAmb.value = D.amb; m.uniforms.uAmbCol.value.setRGB(D.ambCol[0], D.ambCol[1], D.ambCol[2]);
     }
     this.scene.fog = null;
     this.amb.intensity = 0.3 + day * 0.5; this.dir.intensity = 0.2 + day * 0.4;

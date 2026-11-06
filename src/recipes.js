@@ -2,8 +2,8 @@
 import { itemByKey } from './blocks.js';
 
 const TAGS = {
-  '#planks': ['oak_planks', 'birch_planks', 'spruce_planks'],
-  '#logs': ['oak_log', 'birch_log', 'spruce_log'],
+  '#planks': ['oak_planks', 'birch_planks', 'spruce_planks', 'jungle_planks'],
+  '#logs': ['oak_log', 'birch_log', 'spruce_log', 'jungle_log'],
   '#wool': ['white_wool', 'red_wool', 'yellow_wool', 'blue_wool', 'green_wool', 'black_wool', 'orange_wool', 'purple_wool'],
   '#coal': ['coal', 'charcoal'],
 };
@@ -28,6 +28,7 @@ function shapeless(ings, out, count = 1) {
 shapeless(['oak_log'], 'oak_planks', 4);
 shapeless(['birch_log'], 'birch_planks', 4);
 shapeless(['spruce_log'], 'spruce_planks', 4);
+shapeless(['jungle_log'], 'jungle_planks', 4);
 shaped(['P', 'P'], { P: '#planks' }, 'stick', 4);
 shaped(['PP', 'PP'], { P: '#planks' }, 'crafting_table');
 shaped(['PPP', 'P P', 'PPP'], { P: '#planks' }, 'chest');
@@ -76,6 +77,17 @@ shaped(['SS', 'SS'], { S: 'snow_block' }, 'snow_block');
 shapeless(['cobblestone', 'tall_grass'], 'mossy_cobblestone');
 shaped([' I ', 'ITI', ' I '], { I: 'iron_ingot', T: 'torch' }, 'lantern');
 shaped([' T ', 'TGT', ' T '], { T: 'torch', G: 'glass' }, 'glowing_crystal');
+
+// structures & dimensions
+shaped(['OOO', 'OGO', 'OOO'], { O: 'obsidian', G: 'glowing_crystal' }, 'glutportal', 2);
+shaped([' I ', 'ILI', ' I '], { I: 'iron_ingot', L: 'lapis' }, 'explorer_compass');
+shaped(['GG', 'GG'], { G: 'glutgestein' }, 'glutziegel', 4);
+shaped(['GBG', 'GBG'], { G: 'glutziegel', B: 'glutgestein' }, 'glutzaun', 6);
+shaped(['LL', 'LL'], { L: 'leerenstein' }, 'leerenstein_ziegel', 4);
+shaped(['QQ', 'QQ'], { Q: 'quartz' }, 'sternenziegel', 4);
+shaped(['S', 'S'], { S: 'sternenziegel' }, 'sternensaeule', 2);
+shaped(['S', 'S'], { S: 'sandstone' }, 'chiseled_sandstone');
+shapeless(['stone_bricks', 'tall_grass'], 'mossy_stone_bricks');
 
 // food & misc
 shaped(['WWW'], { W: 'wheat' }, 'bread');
@@ -144,4 +156,4 @@ smelt('sand', 'glass'); smelt('cobblestone', 'stone'); smelt('stone', 'smooth_st
 smelt('clay_ball', 'brick'); smelt('clay', 'terracotta');
 smelt('oak_log', 'charcoal'); smelt('birch_log', 'charcoal'); smelt('spruce_log', 'charcoal');
 smelt('porkchop', 'cooked_porkchop'); smelt('beef', 'steak'); smelt('mutton', 'cooked_mutton'); smelt('chicken', 'cooked_chicken');
-smelt('cactus', 'green_dye'); smelt('diamond_ore', 'diamond'); smelt('coal_ore', 'coal'); smelt('lapis_ore', 'lapis');
+smelt('cactus', 'green_dye'); smelt('stone_bricks', 'cracked_stone_bricks'); smelt('glutquarz_erz', 'quartz'); smelt('jungle_log', 'charcoal'); smelt('diamond_ore', 'diamond'); smelt('coal_ore', 'coal'); smelt('lapis_ore', 'lapis');

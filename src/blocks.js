@@ -118,7 +118,30 @@ block(82, 'blue_flower', 'Kornblume', nonSolidCross);
 block(83, 'fence', 'Holzzaun', { hardness: 2, tool: 'axe', opaque: false, cutout: true, fuel: 15, tex: 'fence' });
 block(84, 'ladder', 'Leiter', { solid: false, opaque: false, cutout: true, hardness: 0.4, tool: 'axe', climb: true, fuel: 5 });
 
-export const NUM_BLOCKS = 85;
+// ---- Dschungel, Dörfer, Tempel, Unterwelt, Leere ----
+block(85, 'jungle_log', 'Tropenholzstamm', { hardness: 2, tool: 'axe', fuel: 15, tex: { top: 'jungle_log_top', bottom: 'jungle_log_top', side: 'jungle_log' } });
+block(86, 'jungle_leaves', 'Tropenlaub', { hardness: 0.2, tool: 'hoe', opaque: false, cutout: true, drop: (r) => (r < 0.04 ? [['jungle_sapling', 1]] : r < 0.06 ? [['apple', 1]] : []) });
+block(87, 'jungle_planks', 'Tropenholzbretter', { hardness: 2, tool: 'axe', fuel: 15 });
+block(88, 'jungle_sapling', 'Tropensetzling', nonSolidCross);
+block(89, 'dirt_path', 'Trampelpfad', { shape: 'flat', hardness: 0.6, tool: 'shovel', drop: 'dirt', opaque: false, tex: { top: 'dirt_path_top', bottom: 'dirt', side: 'dirt_path_side' } });
+block(90, 'glutgestein', 'Glutgestein', { hardness: 0.4, tool: 'pickaxe', level: 1 });
+block(91, 'aschesand', 'Aschesand', { hardness: 0.5, tool: 'shovel', slow: true });
+block(92, 'glutquarz_erz', 'Glutquarzerz', { hardness: 3, tool: 'pickaxe', level: 1, drop: 'quartz' });
+block(93, 'glutziegel', 'Glutziegel', { hardness: 2, tool: 'pickaxe', level: 1 });
+block(94, 'glutzaun', 'Glutziegelzaun', { hardness: 2, tool: 'pickaxe', level: 1, opaque: false, cutout: true });
+block(95, 'leerenstein', 'Leerenstein', { hardness: 3, tool: 'pickaxe', level: 1 });
+block(96, 'leerenstein_ziegel', 'Leerensteinziegel', { hardness: 3, tool: 'pickaxe', level: 1 });
+block(97, 'sternenziegel', 'Sternenziegel', { hardness: 1.5, tool: 'pickaxe', level: 1 });
+block(98, 'sternensaeule', 'Sternensäule', { hardness: 1.5, tool: 'pickaxe', level: 1, tex: { top: 'sternensaeule_top', bottom: 'sternensaeule_top', side: 'sternensaeule' } });
+block(99, 'glutportal', 'Glutportal', { solid: false, opaque: false, cutout: true, hardness: 1, light: 11, portal: 'nether' });
+block(100, 'leerenportal', 'Leerenportal', { solid: false, opaque: false, cutout: true, hardness: -1, light: 12, portal: 'end' });
+block(101, 'leerenrahmen', 'Leerenrahmen', { hardness: -1, light: 3, tex: { top: 'leerenrahmen_top', bottom: 'leerenstein', side: 'leerenrahmen_side' } });
+block(102, 'chiseled_sandstone', 'Gemeißelter Sandstein', { hardness: 0.8, tool: 'pickaxe', level: 1, tex: { top: 'sandstone_top', bottom: 'sandstone_top', side: 'chiseled_sandstone' } });
+block(103, 'mossy_stone_bricks', 'Bemooste Steinziegel', { hardness: 1.5, tool: 'pickaxe', level: 1 });
+block(104, 'cracked_stone_bricks', 'Rissige Steinziegel', { hardness: 1.5, tool: 'pickaxe', level: 1 });
+block(105, 'glutpilz', 'Glutpilz', Object.assign({}, nonSolidCross, { light: 6 }));
+
+export const NUM_BLOCKS = 106;
 
 // ---------- Items ----------
 let nextItem = 256;
@@ -182,6 +205,8 @@ item('black_dye', 'Schwarzer Farbstoff');
 item('orange_dye', 'Oranger Farbstoff');
 item('purple_dye', 'Violetter Farbstoff');
 item('blue_dye', 'Blauer Farbstoff');
+item('quartz', 'Glutquarz');
+item('explorer_compass', 'Entdeckerkompass', { stack: 1, compass: true });
 
 export const TIERS = [
   { key: 'wooden', name: 'Holz', level: 1, speed: 2, dur: 59, dmg: 0, color: 'wood' },

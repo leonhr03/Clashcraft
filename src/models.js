@@ -170,90 +170,147 @@ function humanoid(root, prefix, limbW, skinFns) {
   return { head, body, arms, legs };
 }
 
-MOB_DEFS.zombie = {
-  name: 'Zombie', w: 0.6, h: 1.9, hp: 20, speed: 1.15, hostile: true, damage: 3, burns: true,
-  drops: [['rotten_flesh', 0, 2]], rare: [['iron_ingot', 0.025], ['raw_iron', 0.03]],
-  build(root) {
-    const m = humanoid(root, 'zombie', 4, {
+function zombieBuild(prefix, P) {
+  return (root) => {
+    const m = humanoid(root, prefix, 4, {
       head: {
-        all: (f) => { f.fill(ZSKIN, 0.08); f.dither(hex('#5a7a48'), 0.15); },
-        top: (f) => { f.fill(hex('#3a2e22'), 0.1); f.dither(ZSKIN, 0.2); },
+        all: (f) => { f.fill(P.skin, 0.08); f.dither(P.skin2, 0.15); },
+        top: (f) => { f.fill(P.hair, 0.1); f.dither(P.skin, 0.2); },
         front: (f) => {
-          f.fill(ZSKIN, 0.07); f.dither(hex('#5a7a48'), 0.15);
-          f.rect(0, 0, 8, 2, hex('#3a2e22'), 0.1); f.px(2, 0, ZSKIN); f.px(6, 1, ZSKIN);
-          f.rect(1, 3, 2, 2, hex('#14200f')); f.rect(5, 3, 2, 2, hex('#14200f')); f.px(2, 3, hex('#c8d84a')); f.px(5, 3, hex('#c8d84a'));
-          f.rect(3, 5, 2, 1, hex('#4a5e3a')); f.rect(2, 6, 4, 1, hex('#2a1e18')); f.px(3, 6, hex('#d8d0b0'));
+          f.fill(P.skin, 0.07); f.dither(P.skin2, 0.15);
+          f.rect(0, 0, 8, 2, P.hair, 0.1); f.px(2, 0, P.skin); f.px(6, 1, P.skin);
+          f.rect(1, 3, 2, 2, P.socket); f.rect(5, 3, 2, 2, P.socket); f.px(2, 3, P.eye); f.px(5, 3, P.eye);
+          f.rect(3, 5, 2, 1, P.skin2); f.rect(2, 6, 4, 1, hex('#2a1e18')); f.px(3, 6, hex('#d8d0b0'));
         },
       },
       body: {
-        all: (f) => { f.fill(ZCLOTH, 0.08); f.spots(hex('#5a3c26'), 3, 1); f.rect(0, f.h - 2, f.w, 2, hex('#3a2a1a')); },
-        front: (f) => { f.fill(ZCLOTH, 0.08); f.rect(3, 0, 2, 3, ZSKIN, 0.05); f.rect(0, 10, 8, 2, hex('#3a2a1a')); f.px(2, 6, ZSKIN); f.px(5, 8, ZSKIN); f.px(6, 4, hex('#4a3020')); },
+        all: (f) => { f.fill(P.cloth, 0.08); f.spots(P.cloth2, 3, 1); f.rect(0, f.h - 2, f.w, 2, P.belt); },
+        front: (f) => { f.fill(P.cloth, 0.08); f.rect(3, 0, 2, 3, P.skin, 0.05); f.rect(0, 10, 8, 2, P.belt); f.px(2, 6, P.skin); f.px(5, 8, P.skin); f.px(6, 4, P.cloth2); },
       },
-      arm: { all: (f) => { f.fill(ZSKIN, 0.07); f.rect(0, 0, f.w, 4, ZCLOTH, 0.08); f.px(1, 7, hex('#4a6a3a')); } },
-      leg: { all: (f) => { f.fill(ZPANTS, 0.08); f.rect(0, f.h - 2, f.w, 2, hex('#2a2420')); f.px(1, 4, hex('#2a2e40')); } },
+      arm: { all: (f) => { f.fill(P.skin, 0.07); f.rect(0, 0, f.w, 4, P.cloth, 0.08); f.px(1, 7, P.skin2); } },
+      leg: { all: (f) => { f.fill(P.pants, 0.08); f.rect(0, f.h - 2, f.w, 2, hex('#2a2420')); } },
     });
     m.arms.forEach((a) => (a.rotation.x = -Math.PI / 2.2));
     m.armsForward = true;
     return m;
-  },
-};
+  };
+}
 
-MOB_DEFS.skeleton = {
-  name: 'Skelett', w: 0.6, h: 1.9, hp: 20, speed: 1.1, hostile: true, ranged: true, burns: true,
-  drops: [['bone', 0, 2], ['arrow', 0, 2]], rare: [['bow', 0.04]],
-  build(root) {
-    const ribs = (f) => { f.clear(); for (let y = 0; y < f.h; y += 2) f.rect(0, y, f.w, 1, BONE, 0.05); f.rect(Math.floor(f.w / 2) - 1, 0, 2, f.h, BONED, 0.05); };
-    const m = humanoid(root, 'skel', 2, {
+function skeletonBuild(prefix, BN, BD, EYE, weapon) {
+  return (root) => {
+    const ribs = (f) => { f.clear(); for (let y = 0; y < f.h; y += 2) f.rect(0, y, f.w, 1, BN, 0.05); f.rect(Math.floor(f.w / 2) - 1, 0, 2, f.h, BD, 0.05); };
+    const m = humanoid(root, prefix, 2, {
       head: {
-        all: (f) => { f.fill(BONE, 0.05); f.dither(BONED, 0.1); },
+        all: (f) => { f.fill(BN, 0.05); f.dither(BD, 0.1); },
         front: (f) => {
-          f.fill(BONE, 0.05);
-          f.rect(1, 3, 2, 2, hex('#141414')); f.rect(5, 3, 2, 2, hex('#141414'));
+          f.fill(BN, 0.05);
+          f.rect(1, 3, 2, 2, EYE); f.rect(5, 3, 2, 2, EYE);
           f.px(3, 5, hex('#3a3a3a')); f.px(4, 5, hex('#3a3a3a'));
-          f.rect(1, 6, 6, 1, hex('#3a3a3a')); for (let x = 1; x < 7; x += 2) f.px(x, 6, BONE);
+          f.rect(1, 6, 6, 1, hex('#3a3a3a')); for (let x = 1; x < 7; x += 2) f.px(x, 6, BN);
         },
       },
       body: { all: ribs },
-      arm: { all: (f) => { f.fill(BONE, 0.05); f.rect(0, 5, f.w, 1, BONED); } },
-      leg: { all: (f) => { f.fill(BONE, 0.05); f.rect(0, 6, f.w, 1, BONED); } },
-    }, { });
-    // bow in right hand
-    part(m.arms[1], 'skel_bow', [1, 10, 2], [0, -9, 1.5], [0, 0, 0], { all: (f) => { f.fill(hex('#7a5530'), 0.05); f.rect(0, 0, f.w, 1, hex('#e0e0e0')); } });
+      arm: { all: (f) => { f.fill(BN, 0.05); f.rect(0, 5, f.w, 1, BD); } },
+      leg: { all: (f) => { f.fill(BN, 0.05); f.rect(0, 6, f.w, 1, BD); } },
+    });
+    if (weapon === 'bow') part(m.arms[1], prefix + '_bow', [1, 10, 2], [0, -9, 1.5], [0, 0, 0], { all: (f) => { f.fill(hex('#7a5530'), 0.05); f.rect(0, 0, f.w, 1, hex('#e0e0e0')); } });
+    else part(m.arms[1], prefix + '_blade', [1, 2, 10], [0, -10, 4], [0, 0, 0], { all: (f) => { f.fill(hex('#3a3a3e'), 0.06); f.rect(0, 0, f.w, 1, hex('#6a6a70')); } });
     m.arms.forEach((a) => (a.rotation.x = -Math.PI / 2.4));
     m.armsForward = true;
     return m;
-  },
-};
+  };
+}
 
-MOB_DEFS.spider = {
-  name: 'Spinne', w: 1.3, h: 0.9, hp: 16, speed: 1.4, hostile: true, damage: 2, neutralDay: true,
-  drops: [['string', 0, 2]],
-  build(root) {
-    const fur = { all: (f) => { f.fill(SPIDER, 0.12); f.dither(hex('#4a3a2e'), 0.15); } };
-    const body = part(root, 'spider_body', [12, 9, 12], [0, 8, -6], [0, 0, 0], Object.assign({}, fur, {
-      top: (f) => { f.fill(SPIDER, 0.12); f.dither(hex('#4a3a2e'), 0.2); f.rect(5, 2, 2, 7, hex('#6a2a1e')); f.rect(3, 4, 6, 1, hex('#6a2a1e')); },
+function spiderBuild(prefix, BODY, BODYD, MARK, EYE, EYE2) {
+  return (root) => {
+    const fur = { all: (f) => { f.fill(BODY, 0.12); f.dither(BODYD, 0.15); } };
+    const body = part(root, prefix + '_body', [12, 9, 12], [0, 8, -6], [0, 0, 0], Object.assign({}, fur, {
+      top: (f) => { f.fill(BODY, 0.12); f.dither(BODYD, 0.2); f.rect(5, 2, 2, 7, MARK); f.rect(3, 4, 6, 1, MARK); },
     }));
-    const thorax = part(root, 'spider_thorax', [6, 6, 6], [0, 7, 1], [0, 0, 0], fur);
-    const head = part(root, 'spider_head', [8, 8, 8], [0, 7, 4], [0, 0, 4], Object.assign({}, fur, {
+    part(root, prefix + '_thorax', [6, 6, 6], [0, 7, 1], [0, 0, 0], fur);
+    const head = part(root, prefix + '_head', [8, 8, 8], [0, 7, 4], [0, 0, 4], Object.assign({}, fur, {
       front: (f) => {
-        f.fill(SPIDERD, 0.1);
-        f.rect(1, 2, 2, 2, hex('#e0281e')); f.rect(5, 2, 2, 2, hex('#e0281e'));
-        f.px(3, 1, hex('#ff5040')); f.px(4, 1, hex('#ff5040')); f.px(0, 4, hex('#b01e14')); f.px(7, 4, hex('#b01e14'));
-        f.px(1, 2, hex('#ffb0a0')); f.px(5, 2, hex('#ffb0a0'));
+        f.fill(BODYD, 0.1);
+        f.rect(1, 2, 2, 2, EYE); f.rect(5, 2, 2, 2, EYE);
+        f.px(3, 1, EYE2); f.px(4, 1, EYE2); f.px(0, 4, EYE); f.px(7, 4, EYE);
+        f.px(1, 2, hex('#ffffff')); f.px(5, 2, hex('#ffffff'));
         f.rect(3, 6, 1, 2, hex('#8a7a6a')); f.rect(4, 6, 1, 2, hex('#8a7a6a'));
       },
     }));
-    const legSkin = { all: (f) => { f.fill(SPIDERD, 0.12); f.px(Math.floor(f.w / 2), 0, hex('#4a3a2e')); } };
+    const legSkin = { all: (f) => { f.fill(BODYD, 0.12); f.px(Math.floor(f.w / 2), 0, BODY); } };
     const legs = [];
     for (let i = 0; i < 8; i++) {
       const side = i < 4 ? -1 : 1, k = i % 4;
-      const g = part(root, 'spider_leg', [14, 2, 2], [side * 3, 8, 3 - k * 2], [side * 7, 0, 0], legSkin);
+      const g = part(root, prefix + '_leg', [14, 2, 2], [side * 3, 8, 3 - k * 2], [side * 7, 0, 0], legSkin);
       g.userData.baseY = side * (0.6 - k * 0.4);
       g.rotation.y = g.userData.baseY;
       g.rotation.z = -side * 0.42;
       legs.push(g);
     }
     return { head, legs, body, spider: true };
+  };
+}
+
+MOB_DEFS.zombie = {
+  name: 'Zombie', w: 0.6, h: 1.9, hp: 20, speed: 1.15, hostile: true, damage: 3, burns: true,
+  drops: [['rotten_flesh', 0, 2]], rare: [['iron_ingot', 0.025], ['raw_iron', 0.03]],
+  build: zombieBuild('zombie', { skin: ZSKIN, skin2: hex('#5a7a48'), hair: hex('#3a2e22'), socket: hex('#14200f'), eye: hex('#c8d84a'), cloth: ZCLOTH, cloth2: hex('#5a3c26'), belt: hex('#3a2a1a'), pants: ZPANTS }),
+};
+MOB_DEFS.ash_zombie = {
+  name: 'Aschezombie', w: 0.6, h: 1.9, hp: 22, speed: 1.2, hostile: true, damage: 4,
+  drops: [['rotten_flesh', 0, 2], ['coal', 0, 1]], rare: [['gold_ingot', 0.05]],
+  build: zombieBuild('ashzombie', { skin: hex('#5a4a44'), skin2: hex('#3e322e'), hair: hex('#1e1614'), socket: hex('#1a0806'), eye: hex('#ff7a1e'), cloth: hex('#4a2420'), cloth2: hex('#2e1614'), belt: hex('#c06018'), pants: hex('#2a2224') }),
+};
+MOB_DEFS.skeleton = {
+  name: 'Skelett', w: 0.6, h: 1.9, hp: 20, speed: 1.1, hostile: true, ranged: true, burns: true,
+  drops: [['bone', 0, 2], ['arrow', 0, 2]], rare: [['bow', 0.04]],
+  build: skeletonBuild('skel', BONE, BONED, hex('#141414'), 'bow'),
+};
+MOB_DEFS.fire_skeleton = {
+  name: 'Glutskelett', w: 0.7, h: 2.2, hp: 24, speed: 1.2, hostile: true, damage: 5,
+  drops: [['bone', 0, 2], ['coal', 0, 2]], rare: [['diamond', 0.02], ['gold_ingot', 0.05]],
+  build: skeletonBuild('fireskel', hex('#3a3434'), hex('#1e1a1a'), hex('#ff6a1a'), 'blade'),
+};
+MOB_DEFS.spider = {
+  name: 'Spinne', w: 1.3, h: 0.9, hp: 16, speed: 1.4, hostile: true, damage: 2, neutralDay: true, spider: true,
+  drops: [['string', 0, 2]],
+  build: spiderBuild('spider', SPIDER, hex('#4a3a2e'), hex('#6a2a1e'), hex('#e0281e'), hex('#ff5040')),
+};
+MOB_DEFS.void_crawler = {
+  name: 'Leerenkrabbler', w: 1.3, h: 0.9, hp: 20, speed: 1.5, hostile: true, damage: 3, spider: true,
+  drops: [['string', 0, 2]], rare: [['diamond', 0.03]],
+  build: spiderBuild('voidcrawler', hex('#2a1e3a'), hex('#4a3a6a'), hex('#7ae0d0'), hex('#c070ff'), hex('#7ae0d0')),
+};
+
+MOB_DEFS.villager = {
+  name: 'Dorfbewohner', w: 0.6, h: 1.95, hp: 20, speed: 0.8, passive: true, villager: true,
+  drops: [],
+  build(root) {
+    const SK = hex('#c89670'), ROBE = hex('#5a7a3a'), ROBE2 = hex('#4a6630'), STRAW = hex('#d8b860');
+    const m = humanoid(root, 'villager', 4, {
+      head: {
+        all: (f) => { f.fill(SK, 0.04); f.rect(0, 0, f.w, 3, hex('#5a3a22'), 0.08); },
+        top: (f) => f.fill(hex('#5a3a22'), 0.08),
+        front: (f) => {
+          f.fill(SK, 0.04); f.rect(0, 0, 8, 2, hex('#5a3a22'), 0.08);
+          f.px(1, 3, [250, 250, 250]); f.px(2, 3, hex('#2a6a3a')); f.px(5, 3, hex('#2a6a3a')); f.px(6, 3, [250, 250, 250]);
+          f.rect(1, 2, 2, 1, hex('#4a2e1a')); f.rect(5, 2, 2, 1, hex('#4a2e1a'));
+          f.px(3, 4, hex('#b07a58')); f.px(4, 4, hex('#b07a58'));
+          f.rect(2, 6, 4, 1, hex('#8a4a3a'));
+          f.rect(1, 5, 1, 2, hex('#6a4a32')); f.rect(6, 5, 1, 2, hex('#6a4a32'));
+        },
+      },
+      body: {
+        all: (f) => { f.fill(ROBE, 0.07); f.rect(0, 7, f.w, 1, hex('#7a5a30')); },
+        front: (f) => { f.fill(ROBE, 0.07); f.rect(3, 0, 2, 2, SK); f.rect(0, 7, f.w, 1, hex('#7a5a30')); f.px(4, 7, hex('#d8c040')); f.rect(3, 2, 1, 4, ROBE2); },
+      },
+      arm: { all: (f) => { f.fill(ROBE, 0.07); f.rect(0, f.h - 3, f.w, 3, SK, 0.04); } },
+      leg: { all: (f) => { f.fill(ROBE2, 0.07); f.rect(0, f.h - 2, f.w, 2, hex('#4a3020')); } },
+    });
+    // straw hat
+    part(m.head, 'villager_hat', [12, 1, 12], [0, 8, 0], [0, 0, 0], { all: (f) => { f.fill(STRAW, 0.08); f.dither(hex('#b89a48'), 0.2); } });
+    part(m.head, 'villager_hattop', [8, 2, 8], [0, 9.5, 0], [0, 0, 0], { all: (f) => { f.fill(STRAW, 0.08); f.rect(0, f.h - 1, f.w, 1, hex('#a0302a')); }, top: (f) => f.fill(STRAW, 0.08) });
+    return m;
   },
 };
 
