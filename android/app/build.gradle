@@ -1,0 +1,49 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'de.blockwelt.game'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'de.blockwelt.game'
+        minSdk 26
+        targetSdk 35
+        versionCode((System.getenv('GITHUB_RUN_NUMBER') ?: '1').toInteger())
+        versionName "1.0." + (System.getenv('GITHUB_RUN_NUMBER') ?: '0')
+    }
+
+    signingConfigs {
+        // Fester Schluessel, damit neue Versionen ueber alte installiert werden koennen (Welten bleiben erhalten).
+        blockwelt {
+            storeFile file('blockwelt.keystore')
+            storePassword 'blockwelt'
+            keyAlias 'blockwelt'
+            keyPassword 'blockwelt'
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.blockwelt
+        }
+        debug {
+            signingConfig signingConfigs.blockwelt
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    androidResources {
+        noCompress += ['js', 'html', 'css']
+    }
+}
+
+dependencies {
+    implementation 'androidx.webkit:webkit:1.12.1'
+}

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Isometrischer Grasblock als App-Symbol -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <!-- top -->
+    <path android:fillColor="#6CB843" android:pathData="M54,26 L82,40 L54,54 L26,40 Z" />
+    <path android:fillColor="#5A9E36" android:pathData="M40,33 L46,36 L40,39 L34,36 Z M60,30 L66,33 L60,36 L54,33 Z M62,44 L68,47 L62,50 L56,47 Z" />
+    <!-- left -->
+    <path android:fillColor="#7A5638" android:pathData="M26,40 L54,54 L54,84 L26,70 Z" />
+    <path android:fillColor="#5FA83A" android:pathData="M26,40 L54,54 L54,61 L50,58 L46,60 L42,56 L38,57 L34,53 L30,53 L26,48 Z" />
+    <!-- right -->
+    <path android:fillColor="#5E3F27" android:pathData="M82,40 L54,54 L54,84 L82,70 Z" />
+    <path android:fillColor="#4A8A2C" android:pathData="M82,40 L54,54 L54,61 L58,58 L62,60 L66,56 L70,57 L74,53 L78,53 L82,48 Z" />
+    <path android:fillColor="#4E3420" android:pathData="M62,66 L66,64 L66,68 L62,70 Z M72,62 L76,60 L76,64 L72,66 Z" />
+    <path android:fillColor="#91683F" android:pathData="M34,60 L38,62 L38,66 L34,64 Z M44,70 L48,72 L48,76 L44,74 Z" />
+</vector>

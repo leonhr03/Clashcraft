@@ -1,0 +1,55 @@
+name: Android APK bauen
+
+on:
+  push:
+    branches: ['**']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Spiel bauen (JavaScript)
+        run: |
+          npm ci
+          npm run build
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: android-actions/setup-android@v3
+
+      - name: APK bauen
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon --stacktrace
+          cp app/build/outputs/apk/release/app-release.apk ../Blockwelt.apk
+
+      - name: APK als Artefakt hochladen
+        uses: actions/upload-artifact@v4
+        with:
+          name: Blockwelt-APK
+          path: Blockwelt.apk
+
+      - name: Release mit APK veroeffentlichen
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          name: Blockwelt 1.0.${{ github.run_number }}
+          body: |
+            Blockwelt APK fuer Android (ab Android 8).
+            Auf dem Handy herunterladen und installieren ("Installation aus unbekannten Quellen" erlauben).
+          files: Blockwelt.apk
+          make_latest: true

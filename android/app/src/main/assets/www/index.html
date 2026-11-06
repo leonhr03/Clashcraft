@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#1b1b1f">
+<title>Blockwelt</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="game"></div>
+
+<div id="hud" class="hidden">
+  <div id="vignette"></div>
+  <div id="dmgflash"></div>
+  <div id="crosshair"></div>
+  <div id="debug" class="hidden"></div>
+  <div id="toast"></div>
+  <div id="itemname"></div>
+  <div id="bottombar">
+    <div id="stats">
+      <div class="row"><div id="armorbar" class="icons"></div><div id="airbar" class="icons right"></div></div>
+      <div class="row"><div id="hearts" class="icons"></div><div id="hunger" class="icons right"></div></div>
+    </div>
+    <div id="hotbarwrap"><div id="hotbar"></div><div id="btn-inv" class="hbtn">•••</div></div>
+  </div>
+  <div id="touchzone">
+    <div id="joy"><div id="joyknob"></div></div>
+  </div>
+  <div id="touchbtns">
+    <div id="btn-pause" class="tbtn small">❚❚</div>
+    <div id="btn-drop" class="tbtn small">⇩</div>
+    <div id="btn-sneak" class="tbtn">⇊</div>
+    <div id="btn-attack" class="tbtn">⛏</div>
+    <div id="btn-use" class="tbtn">✋</div>
+    <div id="btn-jump" class="tbtn big">⇧</div>
+  </div>
+</div>
+
+<div id="screen" class="overlay hidden"><div id="panel"></div></div>
+
+<div id="mainmenu" class="menu">
+  <div class="menubg"></div>
+  <div class="menuinner">
+    <h1 class="logo">BLOCKWELT</h1>
+    <div class="splash">Baue deine eigene Welt!</div>
+    <button class="btn" id="mm-play">Spielen</button>
+    <button class="btn" id="mm-settings">Einstellungen</button>
+    <div class="version">Version 1.0 · Eigenes Voxel-Sandbox-Spiel</div>
+  </div>
+</div>
+
+<div id="worldlist" class="menu hidden">
+  <div class="menubg"></div>
+  <div class="menuinner wide">
+    <h2>Welt auswählen</h2>
+    <div id="worlds"></div>
+    <div class="btnrow">
+      <button class="btn" id="wl-new">Neue Welt erstellen</button>
+      <button class="btn" id="wl-back">Zurück</button>
+    </div>
+  </div>
+</div>
+
+<div id="createworld" class="menu hidden">
+  <div class="menubg"></div>
+  <div class="menuinner">
+    <h2>Neue Welt</h2>
+    <label>Name der Welt<input id="cw-name" value="Neue Welt" maxlength="32"></label>
+    <label>Startwert (Seed, leer = zufällig)<input id="cw-seed" placeholder="zufällig"></label>
+    <div class="btnrow">
+      <button class="btn toggle" id="cw-mode" data-mode="survival">Spielmodus: Überleben</button>
+    </div>
+    <div class="btnrow">
+      <button class="btn" id="cw-create">Welt erstellen</button>
+      <button class="btn" id="cw-back">Abbrechen</button>
+    </div>
+  </div>
+</div>
+
+<div id="settings" class="menu hidden">
+  <div class="menubg"></div>
+  <div class="menuinner wide">
+    <h2>Einstellungen</h2>
+    <div id="settingsgrid"></div>
+    <button class="btn" id="st-back">Fertig</button>
+  </div>
+</div>
+
+<div id="pausemenu" class="menu hidden dim">
+  <div class="menuinner">
+    <h2>Spielmenü</h2>
+    <button class="btn" id="pm-resume">Zurück zum Spiel</button>
+    <button class="btn" id="pm-mode">Spielmodus wechseln</button>
+    <button class="btn" id="pm-settings">Einstellungen</button>
+    <button class="btn" id="pm-quit">Speichern &amp; Verlassen</button>
+  </div>
+</div>
+
+<div id="deathscreen" class="menu hidden red">
+  <div class="menuinner">
+    <h1 class="dead">Du bist gestorben!</h1>
+    <button class="btn" id="ds-respawn">Wiederbeleben</button>
+    <button class="btn" id="ds-quit">Hauptmenü</button>
+  </div>
+</div>
+
+<div id="loading" class="menu hidden">
+  <div class="menubg"></div>
+  <div class="menuinner">
+    <h2>Welt wird geladen…</h2>
+    <div class="progress"><div id="loadbar"></div></div>
+  </div>
+</div>
+
+<script src="game.js"></script>
+</body>
+</html>

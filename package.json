@@ -1,0 +1,16 @@
+{
+  "name": "blockwelt",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Blockwelt - ein eigenes Voxel-Sandbox-Spiel fuer Android",
+  "scripts": {
+    "build": "esbuild src/main.js --bundle --minify --format=iife --target=es2020 --outfile=android/app/src/main/assets/www/game.js",
+    "dev": "esbuild src/main.js --bundle --format=iife --target=es2020 --sourcemap --outfile=android/app/src/main/assets/www/game.js"
+  },
+  "dependencies": {
+    "three": "0.170.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.24.2"
+  }
+}
