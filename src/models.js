@@ -5,20 +5,48 @@ import { mulberry32 } from './noise.js';
 function hex(h) { const n = parseInt(h.replace('#', ''), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
 function sh(c, f) { return [Math.min(255, c[0] * f) | 0, Math.min(255, c[1] * f) | 0, Math.min(255, c[2] * f) | 0]; }
 
+const MK = 2; // fine pixels per model pixel (HD skins)
 class Face {
   constructor(img, x0, y0, w, h, W, rnd) { this.img = img; this.x0 = x0; this.y0 = y0; this.w = w; this.h = h; this.W = W; this.rnd = rnd; }
-  px(x, y, c, a = 255) {
-    x |= 0; y |= 0;
-    if (x < 0 || y < 0 || x >= this.w || y >= this.h) return this;
-    const i = ((this.y0 + y) * this.W + this.x0 + x) * 4;
+  pf(fx, fy, c, a = 255) {
+    if (fx < 0 || fy < 0 || fx >= this.w * MK || fy >= this.h * MK) return;
+    const i = ((this.y0 * MK + fy) * this.W * MK + this.x0 * MK + fx) * 4;
     this.img[i] = c[0]; this.img[i + 1] = c[1]; this.img[i + 2] = c[2]; this.img[i + 3] = a;
+  }
+  px(x, y, c, a = 255) {
+    x = Math.floor(x); y = Math.floor(y);
+    if (x < 0 || y < 0 || x >= this.w || y >= this.h) return this;
+    for (let b = 0; b < MK; b++) for (let q = 0; q < MK; q++) this.pf(x * MK + q, y * MK + b, a ? sh(c, 1 + (this.rnd() - 0.5) * 0.06) : c, a);
     return this;
   }
-  fill(c, v = 0.08) { for (let y = 0; y < this.h; y++) for (let x = 0; x < this.w; x++) this.px(x, y, sh(c, 1 + (this.rnd() * 2 - 1) * v)); return this; }
+  fill(c, v = 0.08) {
+    for (let y = 0; y < this.h; y++) for (let x = 0; x < this.w; x++) {
+      const base = sh(c, 1 + (this.rnd() * 2 - 1) * v);
+      for (let b = 0; b < MK; b++) for (let q = 0; q < MK; q++) this.pf(x * MK + q, y * MK + b, sh(base, 1 + (this.rnd() * 2 - 1) * v * 0.5));
+    }
+    return this;
+  }
   rect(x, y, w, h, c, v = 0) { for (let j = y; j < y + h; j++) for (let i = x; i < x + w; i++) this.px(i, j, v ? sh(c, 1 + (this.rnd() * 2 - 1) * v) : c); return this; }
   spots(c, n, s = 2) { for (let k = 0; k < n; k++) { const x = Math.floor(this.rnd() * this.w), y = Math.floor(this.rnd() * this.h); this.rect(x, y, s + Math.floor(this.rnd() * 2), s, c, 0.05); } return this; }
-  dither(c, p) { for (let y = 0; y < this.h; y++) for (let x = 0; x < this.w; x++) if (this.rnd() < p) this.px(x, y, sh(c, 0.95 + this.rnd() * 0.1)); return this; }
-  clear() { for (let y = 0; y < this.h; y++) for (let x = 0; x < this.w; x++) this.px(x, y, [0, 0, 0], 0); return this; }
+  dither(c, p) {
+    for (let fy = 0; fy < this.h * MK; fy++) for (let fx = 0; fx < this.w * MK; fx++) if (this.rnd() < p * 0.7) this.pf(fx, fy, sh(c, 0.95 + this.rnd() * 0.1));
+    return this;
+  }
+  clear() { for (let fy = 0; fy < this.h * MK; fy++) for (let fx = 0; fx < this.w * MK; fx++) this.pf(fx, fy, [0, 0, 0], 0); return this; }
+  // soft shading so boxes read as rounded bodies
+  finish(kind) {
+    const FW = this.w * MK, FH = this.h * MK;
+    for (let fy = 0; fy < FH; fy++) for (let fx = 0; fx < FW; fx++) {
+      const i = ((this.y0 * MK + fy) * this.W * MK + this.x0 * MK + fx) * 4;
+      if (!this.img[i + 3]) continue;
+      let f = 1;
+      if (kind === 'top') f = 1.06;
+      else if (kind === 'bottom') f = 0.82;
+      else f = 1.05 - (fy / FH) * 0.14;
+      if (fx === 0 || fy === 0 || fx === FW - 1 || fy === FH - 1) f *= 0.9;
+      this.img[i] = Math.min(255, this.img[i] * f); this.img[i + 1] = Math.min(255, this.img[i + 1] * f); this.img[i + 2] = Math.min(255, this.img[i + 2] * f);
+    }
+  }
 }
 
 // faces: {all, front, back, left, right, top, bottom} painter fns (face) => void
@@ -33,16 +61,17 @@ function makeBox(id, w, h, d, paint, opts = {}) {
   let x = 0;
   for (const k of order) { offs[k] = x; x += fw[k][0] + 1; }
   if (!mat) {
-    const img = new Uint8ClampedArray(W * H * 4);
+    const img = new Uint8ClampedArray(W * H * 4 * MK * MK);
     const rnd = mulberry32(id.split('').reduce((a, c) => a * 31 + c.charCodeAt(0), 7) >>> 0);
     for (const k of order) {
       const f = new Face(img, offs[k], 0, fw[k][0], fw[k][1], W, rnd);
       if (paint.all) paint.all(f, k);
       if (paint[k]) paint[k](f);
+      f.finish(k);
     }
     const canvas = document.createElement('canvas');
-    canvas.width = W; canvas.height = H;
-    canvas.getContext('2d').putImageData(new ImageData(img, W, H), 0, 0);
+    canvas.width = W * MK; canvas.height = H * MK;
+    canvas.getContext('2d').putImageData(new ImageData(img, W * MK, H * MK), 0, 0);
     const tex = new THREE.CanvasTexture(canvas);
     tex.magFilter = THREE.NearestFilter; tex.minFilter = THREE.NearestFilter; tex.colorSpace = THREE.SRGBColorSpace;
     mat = new THREE.MeshLambertMaterial({ map: tex, transparent: !!opts.transparent, alphaTest: opts.transparent ? 0 : 0.5, opacity: opts.opacity || 1, depthWrite: !opts.transparent });

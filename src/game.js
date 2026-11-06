@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { World, CS, CH } from './world.js';
 import { buildChunkMesh } from './mesher.js';
-import { buildAtlas, tileUV } from './textures.js';
+import { buildAtlas, buildMipmaps, tileUV } from './textures.js';
 import { BLOCKS, ITEMS, B, I, SOLID, itemByKey } from './blocks.js';
 import { Player } from './player.js';
 import { EntityManager, itemGeometry } from './entities.js';
@@ -21,36 +21,99 @@ export const DIMS = {
 
 const VERT = `
 attribute vec3 lt;
+uniform float uTime, uWave;
 varying vec2 vUv;
 varying vec3 vLt;
 varying float vDist;
+varying vec3 vWorld;
+varying float vWav;
 void main(){
-  vUv = uv; vLt = lt;
-  vec4 mv = modelViewMatrix * vec4(position,1.0);
+  vUv = uv;
+  vec3 l = lt;
+  vec3 p = position;
+  float wav = 0.0;
+  if (l.z > 5.0) { l.z -= 10.0; wav = 1.0; }
+  if (wav > 0.5 && uWave > 0.5) {
+    p.x += sin(uTime * 1.7 + p.z * 0.9 + p.y * 0.5) * 0.05;
+    p.z += cos(uTime * 1.3 + p.x * 0.8 + p.y * 0.4) * 0.05;
+  }
+  #ifdef WATER
+  if (uWave > 0.5) {
+    float top = step(0.5, fract(p.y + 0.001));
+    p.y += top * (sin(uTime * 1.6 + p.x * 0.7 + p.z * 0.5) * 0.03 + sin(uTime * 2.3 - p.x * 0.4 + p.z * 0.9) * 0.02 - 0.03);
+  }
+  #endif
+  vLt = l; vWav = wav; vWorld = p;
+  vec4 mv = modelViewMatrix * vec4(p, 1.0);
   vDist = length(mv.xyz);
   gl_Position = projectionMatrix * mv;
 }`;
 const FRAG = `
 uniform sampler2D map;
-uniform float uDay;
-uniform vec3 uFog;
-uniform float uFogNear, uFogFar, uAlpha, uAlphaTest, uAmb;
-uniform vec3 uAmbCol;
+uniform sampler2D uShadowMap;
+uniform mat4 uShadowMat;
+uniform float uDay, uFogNear, uFogFar, uAlpha, uAlphaTest, uAmb, uShadowOn, uTime, uTexel;
+uniform vec3 uFog, uAmbCol, uSunDir, uSunCol, uSkyCol;
 varying vec2 vUv;
 varying vec3 vLt;
 varying float vDist;
+varying vec3 vWorld;
+varying float vWav;
+float shadowAt(vec3 wp) {
+  vec4 s = uShadowMat * vec4(wp, 1.0);
+  vec3 sc = s.xyz / s.w * 0.5 + 0.5;
+  if (sc.x < 0.0 || sc.x > 1.0 || sc.y < 0.0 || sc.y > 1.0 || sc.z > 1.0) return 1.0;
+  float sum = 0.0;
+  for (int i = 0; i < 4; i++) {
+    vec2 o = vec2(float(i - (i / 2) * 2) - 0.5, float(i / 2) - 0.5) * uTexel;
+    sum += (sc.z - 0.0008 > texture2D(uShadowMap, sc.xy + o).r) ? 0.0 : 1.0;
+  }
+  return sum * 0.25;
+}
 void main(){
   vec4 c = texture2D(map, vUv);
   if (c.a < uAlphaTest) discard;
+  vec3 N = normalize(cross(dFdx(vWorld), dFdy(vWorld)));
   float sky = vLt.x * uDay;
   float bl = vLt.y;
-  float ls = pow(0.82, 15.0*(1.0-sky));
-  float lb = pow(0.82, 15.0*(1.0-bl));
-  vec3 light = max(vec3(ls), vec3(lb)*vec3(1.0,0.9,0.75));
+  vec3 skyL = vec3(pow(0.82, 15.0 * (1.0 - sky)));
+  float lb = pow(0.82, 15.0 * (1.0 - bl));
+  float sunStrength = 0.0, sun = 0.0;
+  if (uShadowOn > 0.5) {
+    float ndl = vWav > 0.5 ? 0.8 : dot(N, uSunDir);
+    float outdoor = smoothstep(0.55, 0.95, vLt.x);
+    sunStrength = clamp(uDay * 1.5 - 0.35, 0.0, 1.0) * outdoor;
+    if (sunStrength > 0.0 && ndl > 0.0) sun = clamp(ndl * 1.4, 0.0, 1.0) * shadowAt(vWorld + N * 0.08);
+    skyL *= mix(1.0, 0.5 + 0.68 * sun, sunStrength);
+    skyL *= mix(vec3(1.0), uSunCol, sunStrength * sun * 0.4);
+    skyL = mix(skyL, skyL * vec3(0.78, 0.86, 1.1), sunStrength * (1.0 - sun) * 0.8);
+  }
+  vec3 light = max(skyL, vec3(lb) * vec3(1.0, 0.86, 0.68));
   light = max(light, uAmbCol * uAmb);
   vec3 col = c.rgb * light * vLt.z;
-  float f = clamp((vDist - uFogNear)/(uFogFar-uFogNear), 0.0, 1.0);
-  gl_FragColor = vec4(mix(col, uFog, f), c.a * uAlpha);
+  float alpha = c.a * uAlpha;
+  vec3 V = normalize(cameraPosition - vWorld);
+  #ifdef WATER
+  if (N.y > 0.5 || N.y < -0.5) {
+    vec3 nW = normalize(vec3(sin(uTime * 1.3 + vWorld.x * 1.1 + vWorld.z * 0.6) * 0.07 + sin(uTime * 2.1 - vWorld.z * 1.7) * 0.04,
+                             1.0,
+                             cos(uTime * 1.1 + vWorld.z * 1.2 - vWorld.x * 0.5) * 0.07 + cos(uTime * 1.9 + vWorld.x * 1.5) * 0.04));
+    if (N.y < 0.0) nW.y = -nW.y;
+    float fres = 0.08 + 0.85 * pow(1.0 - max(dot(V, nW), 0.0), 4.0);
+    vec3 refl = uSkyCol * (0.35 + 0.65 * max(uDay, 0.1)) * max(vLt.x, 0.15);
+    col = mix(col, refl, fres * (uShadowOn > 0.5 ? 0.85 : 0.4));
+    float spec = pow(max(dot(reflect(-uSunDir, nW), V), 0.0), 90.0) * sunStrength;
+    col += uSunCol * spec * 2.2;
+    alpha = mix(alpha, 0.97, fres * 0.6);
+  }
+  #endif
+  vec3 fogC = uFog;
+  if (uShadowOn > 0.5) {
+    float sa = pow(max(dot(-V, uSunDir), 0.0), 6.0) * clamp(uDay * 1.4 - 0.2, 0.0, 1.0);
+    fogC = mix(uFog, uSunCol, sa * 0.55);
+  }
+  float f = clamp((vDist - uFogNear) / (uFogFar - uFogNear), 0.0, 1.0);
+  gl_FragColor = vec4(mix(col, fogC, f), alpha);
   #include <colorspace_fragment>
 }`;
 
@@ -77,15 +140,29 @@ export class Game {
 
     const atlas = buildAtlas();
     this.atlasTex = new THREE.CanvasTexture(atlas);
-    this.atlasTex.magFilter = THREE.NearestFilter; this.atlasTex.minFilter = THREE.NearestFilter;
+    this.atlasTex.magFilter = THREE.NearestFilter;
+    this.atlasTex.mipmaps = buildMipmaps(atlas);
+    this.atlasTex.minFilter = THREE.NearestMipmapLinearFilter;
     this.atlasTex.generateMipmaps = false; this.atlasTex.colorSpace = THREE.SRGBColorSpace;
+    // shadow map (sun) used by the shader mode
+    const SR = settings.shadowRes || 1024;
+    this.shadowRT = new THREE.WebGLRenderTarget(SR, SR, { depthTexture: new THREE.DepthTexture(SR, SR), depthBuffer: true });
+    this.shadowRT.depthTexture.minFilter = THREE.NearestFilter; this.shadowRT.depthTexture.magFilter = THREE.NearestFilter;
+    this.shadowCam = new THREE.OrthographicCamera(-48, 48, 48, -48, 1, 400);
+    this.shadowDepthMat = new THREE.MeshBasicMaterial({ colorWrite: false });
+    this.sunDir = new THREE.Vector3(0.3, 1, 0.2).normalize();
+    this.shadowMat = new THREE.Matrix4();
+    this.frameNo = 0;
     const uniforms = () => ({
       map: { value: this.atlasTex }, uDay: { value: 1 }, uFog: { value: new THREE.Color() },
       uFogNear: { value: 40 }, uFogFar: { value: 60 }, uAlpha: { value: 1 }, uAlphaTest: { value: 0.5 },
       uAmb: { value: 0.03 }, uAmbCol: { value: new THREE.Color(1, 1, 1) },
+      uShadowMap: { value: this.shadowRT.depthTexture }, uShadowMat: { value: this.shadowMat }, uShadowOn: { value: 0 },
+      uTexel: { value: 1 / SR }, uTime: { value: 0 }, uWave: { value: 1 },
+      uSunDir: { value: this.sunDir }, uSunCol: { value: new THREE.Color(1, 0.92, 0.75) }, uSkyCol: { value: new THREE.Color(0x86bdf8) },
     });
     this.solidMat = new THREE.ShaderMaterial({ vertexShader: VERT, fragmentShader: FRAG, uniforms: uniforms() });
-    this.waterMat = new THREE.ShaderMaterial({ vertexShader: VERT, fragmentShader: FRAG, uniforms: uniforms(), transparent: true, depthWrite: false, side: THREE.DoubleSide });
+    this.waterMat = new THREE.ShaderMaterial({ vertexShader: VERT, fragmentShader: FRAG, uniforms: uniforms(), transparent: true, depthWrite: false, side: THREE.DoubleSide, defines: { WATER: 1 } });
     this.waterMat.uniforms.uAlpha.value = 0.85; this.waterMat.uniforms.uAlphaTest.value = 0.01;
     this.itemMaterial = new THREE.MeshLambertMaterial({ map: this.atlasTex, alphaTest: 0.5, side: THREE.DoubleSide });
 
@@ -341,6 +418,8 @@ export class Game {
       const c = w.getChunk(pcx + dx, pcz + dz);
       if (!c || !c.dirty) continue;
       if (!w.getChunk(c.cx + 1, c.cz) || !w.getChunk(c.cx - 1, c.cz) || !w.getChunk(c.cx, c.cz + 1) || !w.getChunk(c.cx, c.cz - 1)) continue;
+      // light the 3x3 neighbourhood first so borders get correct light (no dark seams)
+      for (let ox = -1; ox <= 1; ox++) for (let oz = -1; oz <= 1; oz++) { const n = w.getChunk(c.cx + ox, c.cz + oz); if (n && n.lightDirty && n !== c) w.computeLight(n); }
       this.buildMesh(c); meshed++;
     }
     // visibility (distance cull)
@@ -905,6 +984,45 @@ export class Game {
     this.handLight.intensity = Math.max(Math.pow(0.82, 15 * (1 - lv)) * 1.0 + 0.1, this.ambient() * 1.8);
   }
 
+  // ------------- sun shadows (shader mode) -------------
+  renderShadows() {
+    const on = this.settings.shaders !== false && this.dim === 'overworld' && this.ready;
+    const day = this.dayFactor();
+    const active = on && day > 0.3;
+    for (const m of [this.solidMat, this.waterMat]) m.uniforms.uShadowOn.value = on ? 1 : 0;
+    if (!active) { if (on) this.renderer.setRenderTarget(null); this.sunDir.set(0, -1, 0); return; }
+    this.frameNo++;
+    // sun direction (tilted a bit so shadows are never perfectly axis aligned)
+    const ang = this.time * Math.PI * 2;
+    this.sunDir.set(Math.cos(ang), Math.max(0.15, Math.sin(ang) * 0.8), 0.4).normalize();
+    this.dir.position.copy(this.sunDir);
+    if (this.frameNo % (this.settings.shadowEvery || 2) !== 0 && this._shadowValid) return;
+    const p = this.player, cam = this.shadowCam;
+    const snap = 2;
+    const cx = Math.round(p.x / snap) * snap, cy = Math.round(p.y / snap) * snap, cz = Math.round(p.z / snap) * snap;
+    cam.position.set(cx + this.sunDir.x * 150, cy + this.sunDir.y * 150, cz + this.sunDir.z * 150);
+    cam.up.set(0, 0, 1);
+    cam.lookAt(cx, cy, cz);
+    cam.updateMatrixWorld();
+    cam.updateProjectionMatrix();
+    this.shadowMat.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse);
+    // hide things that should not cast shadows
+    const hidden = [this.sky.group, this.sky.clouds, this.selBox, this.crack];
+    const prevVis = hidden.map((o) => o.visible);
+    hidden.forEach((o) => (o.visible = false));
+    const waterMeshes = [];
+    for (const c of this.world.chunks.values()) if (c.mesh) for (const m of c.mesh) if (m.material === this.waterMat && m.visible) { m.visible = false; waterMeshes.push(m); }
+    this.scene.overrideMaterial = this.shadowDepthMat;
+    this.renderer.setRenderTarget(this.shadowRT);
+    this.renderer.clear();
+    this.renderer.render(this.scene, cam);
+    this.renderer.setRenderTarget(null);
+    this.scene.overrideMaterial = null;
+    hidden.forEach((o, i) => (o.visible = prevVis[i]));
+    for (const m of waterMeshes) m.visible = true;
+    this._shadowValid = true;
+  }
+
   // ------------- main loop -------------
   frame(now) {
     if (!this.running) return;
@@ -970,6 +1088,8 @@ export class Game {
     for (const m of [this.solidMat, this.waterMat]) {
       m.uniforms.uDay.value = day; m.uniforms.uFog.value.copy(fogCol); m.uniforms.uFogNear.value = near; m.uniforms.uFogFar.value = far;
       m.uniforms.uAmb.value = D.amb; m.uniforms.uAmbCol.value.setRGB(D.ambCol[0], D.ambCol[1], D.ambCol[2]);
+      m.uniforms.uTime.value = now / 1000; m.uniforms.uWave.value = this.settings.shaders !== false ? 1 : 0;
+      m.uniforms.uSkyCol.value.copy(skyCol);
     }
     this.scene.fog = null;
     this.amb.intensity = 0.3 + day * 0.5; this.dir.intensity = 0.2 + day * 0.4;
@@ -981,6 +1101,7 @@ export class Game {
       } else this.selBox.visible = false;
     }
     this.updateHand(dt);
+    this.renderShadows();
     this.renderer.clear();
     this.renderer.render(this.scene, this.camera);
     if (this.settings.showHand !== false && !p.dead) {

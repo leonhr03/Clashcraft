@@ -19,36 +19,53 @@ function mix(a, b, t) { return [clamp(a[0] + (b[0] - a[0]) * t), clamp(a[1] + (b
 function clamp(v) { return Math.max(0, Math.min(255, Math.round(v))); }
 const T = [0, 0, 0, 0];
 
+const K = 2;              // fine pixels per unit (16 units -> 32 px)
+export const RES = TS * K; // real tile resolution
+
 class Px {
   constructor(name) {
-    this.d = new Uint8ClampedArray(TS * TS * 4);
+    this.d = new Uint8ClampedArray(RES * RES * 4);
     this.rnd = mulberry32(hashString(name));
   }
-  set(x, y, c) {
-    if (x < 0 || y < 0 || x >= TS || y >= TS) return;
-    const i = ((y | 0) * TS + (x | 0)) * 4;
+  // fine pixel
+  setF(x, y, c) {
+    if (x < 0 || y < 0 || x >= RES || y >= RES) return;
+    const i = ((y | 0) * RES + (x | 0)) * 4;
     this.d[i] = c[0]; this.d[i + 1] = c[1]; this.d[i + 2] = c[2]; this.d[i + 3] = c[3] === undefined ? 255 : c[3];
   }
-  get(x, y) {
-    x = ((x % TS) + TS) % TS; y = ((y % TS) + TS) % TS;
-    const i = (y * TS + x) * 4;
-    return [this.d[i], this.d[i + 1], this.d[i + 2], this.d[i + 3]];
+  // unit pixel (2x2 fine), slight per-fine-pixel grain for a richer look
+  set(x, y, c) {
+    x = Math.floor(x); y = Math.floor(y);
+    if (x < 0 || y < 0 || x >= TS || y >= TS) return;
+    for (let b = 0; b < K; b++) for (let a = 0; a < K; a++) {
+      const g = c[3] === 0 ? c : shade(c, 1 + (this.r() - 0.5) * 0.05 + (a === 0 && b === 0 ? 0.02 : 0) - (a === K - 1 && b === K - 1 ? 0.02 : 0));
+      this.setF(x * K + a, y * K + b, g);
+    }
   }
-  alpha(x, y) { if (x < 0 || y < 0 || x >= TS || y >= TS) return 0; return this.d[(y * TS + x) * 4 + 3]; }
+  getF(x, y) { const i = (y * RES + x) * 4; return [this.d[i], this.d[i + 1], this.d[i + 2], this.d[i + 3]]; }
   r() { return this.rnd(); }
-  // fill with base color & random brightness variation
-  noise(base, v = 0.12, alpha = 255) {
-    for (let y = 0; y < TS; y++) for (let x = 0; x < TS; x++) {
-      const f = 1 + (this.r() * 2 - 1) * v;
-      const c = shade(base, f); c[3] = alpha;
-      this.set(x, y, c);
+  // iterate fine pixels; fn(ux, uy, fx, fy) gets unit coordinates of the pixel centre; return colour or null
+  eachF(fn) {
+    for (let fy = 0; fy < RES; fy++) for (let fx = 0; fx < RES; fx++) {
+      const c = fn((fx + 0.5) / K, (fy + 0.5) / K, fx, fy);
+      if (c) this.setF(fx, fy, c);
     }
     return this;
   }
+  noise(base, v = 0.12, alpha = 255) {
+    // two-scale noise: coarse unit variation + fine grain
+    const coarse = [];
+    for (let i = 0; i < TS * TS; i++) coarse.push((this.r() * 2 - 1) * v);
+    return this.eachF((ux, uy) => {
+      const f = 1 + coarse[Math.floor(uy) * TS + Math.floor(ux)] * 0.75 + (this.r() * 2 - 1) * v * 0.45;
+      const c = shade(base, f); c[3] = alpha; return c;
+    });
+  }
   specks(color, count, size = 1) {
-    for (let i = 0; i < count; i++) {
-      const x = Math.floor(this.r() * TS), y = Math.floor(this.r() * TS);
-      for (let a = 0; a < size; a++) for (let b = 0; b < size; b++) this.set((x + a) % TS, (y + b) % TS, shade(color, 0.9 + this.r() * 0.2));
+    for (let i = 0; i < count * 2; i++) {
+      const x = Math.floor(this.r() * RES), y = Math.floor(this.r() * RES);
+      const sz = size * K - (this.r() < 0.5 ? 1 : 0);
+      for (let a = 0; a < sz; a++) for (let b = 0; b < sz; b++) this.setF((x + a) % RES, (y + b) % RES, shade(color, 0.88 + this.r() * 0.24));
     }
     return this;
   }
@@ -56,111 +73,111 @@ class Px {
     for (let i = 0; i < count; i++) {
       const cx = this.r() * TS, cy = this.r() * TS, rr = rmin + this.r() * (rmax - rmin);
       const col = colors[Math.floor(this.r() * colors.length)];
-      for (let y = -4; y <= 4; y++) for (let x = -4; x <= 4; x++) {
-        if (x * x + y * y <= rr * rr) {
-          const px = Math.floor(cx + x), py = Math.floor(cy + y);
-          this.set(((px % TS) + TS) % TS, ((py % TS) + TS) % TS, shade(col, 0.92 + this.r() * 0.16));
+      for (let fy = -10; fy <= 10; fy++) for (let fx = -10; fx <= 10; fx++) {
+        const ux = fx / K, uy = fy / K;
+        const d = Math.sqrt(ux * ux + uy * uy) + (this.r() - 0.5) * 0.6;
+        if (d <= rr) {
+          const px = Math.floor(cx * K + fx), py = Math.floor(cy * K + fy);
+          this.setF(((px % RES) + RES) % RES, ((py % RES) + RES) % RES, shade(col, 0.9 + this.r() * 0.2 - d / rr * 0.08));
         }
       }
     }
     return this;
   }
   rect(x0, y0, w, h, c, v = 0) {
-    for (let y = y0; y < y0 + h; y++) for (let x = x0; x < x0 + w; x++) this.set(x, y, v ? shade(c, 1 + (this.r() * 2 - 1) * v) : c);
+    for (let fy = Math.round(y0 * K); fy < Math.round((y0 + h) * K); fy++) for (let fx = Math.round(x0 * K); fx < Math.round((x0 + w) * K); fx++) {
+      this.setF(fx, fy, v ? shade(c, 1 + (this.r() * 2 - 1) * v) : c);
+    }
     return this;
   }
   border(c, w = 1) {
-    for (let i = 0; i < TS; i++) for (let k = 0; k < w; k++) {
-      this.set(i, k, c); this.set(i, TS - 1 - k, c); this.set(k, i, c); this.set(TS - 1 - k, i, c);
+    const fw = w * K;
+    for (let i = 0; i < RES; i++) for (let k = 0; k < fw; k++) {
+      const g = shade(c, 0.95 + this.r() * 0.1);
+      this.setF(i, k, g); this.setF(i, RES - 1 - k, g); this.setF(k, i, g); this.setF(RES - 1 - k, i, g);
     }
     return this;
   }
   clear() { this.d.fill(0); return this; }
-  // ore clusters on top of existing texture
+  // ore clusters: shiny gem pixels with highlight and shadow
   ore(color, dark, n = 5) {
     for (let i = 0; i < n; i++) {
       const cx = 2 + Math.floor(this.r() * 12), cy = 2 + Math.floor(this.r() * 12);
       const pts = [[0, 0], [1, 0], [0, 1], [1, 1], [-1, 0], [0, -1]];
       for (const [dx, dy] of pts) {
         if (this.r() < 0.75) {
-          this.set(cx + dx, cy + dy, shade(color, 0.85 + this.r() * 0.3));
-          if (this.r() < 0.4) this.set(cx + dx + 1, cy + dy + 1, dark);
+          const ux = cx + dx, uy = cy + dy;
+          for (let b = 0; b < K; b++) for (let a = 0; a < K; a++) {
+            let c = shade(color, 0.85 + this.r() * 0.25);
+            if (a === 0 && b === 0) c = shade(color, 1.35);
+            if (a === K - 1 && b === K - 1) c = dark;
+            this.setF(ux * K + a, uy * K + b, c);
+          }
         }
       }
     }
     return this;
   }
-  // voronoi stone pattern for cobblestone-like blocks
+  // voronoi stones with rounded shading
   cells(n, baseCols, line, jitter = 0.18) {
     const pts = [];
     for (let i = 0; i < n; i++) pts.push([this.r() * TS, this.r() * TS, baseCols[Math.floor(this.r() * baseCols.length)]]);
-    for (let y = 0; y < TS; y++) for (let x = 0; x < TS; x++) {
-      let d1 = 1e9, d2 = 1e9, c = null;
+    return this.eachF((ux, uy) => {
+      let d1 = 1e9, d2 = 1e9, c = null, bx = 0, by = 0;
       for (const p of pts) {
         for (let ox = -1; ox <= 1; ox++) for (let oy = -1; oy <= 1; oy++) {
-          const dx = x + 0.5 - (p[0] + ox * TS), dy = y + 0.5 - (p[1] + oy * TS);
+          const dx = ux - (p[0] + ox * TS), dy = uy - (p[1] + oy * TS);
           const d = Math.sqrt(dx * dx + dy * dy);
-          if (d < d1) { d2 = d1; d1 = d; c = p[2]; } else if (d < d2) d2 = d;
+          if (d < d1) { d2 = d1; d1 = d; c = p[2]; bx = dx; by = dy; } else if (d < d2) d2 = d;
         }
       }
-      if (d2 - d1 < 1.1) this.set(x, y, shade(line, 0.9 + this.r() * 0.2));
-      else {
-        const f = 1.12 - d1 * 0.05 + (this.r() * 2 - 1) * jitter * 0.5;
-        this.set(x, y, shade(c, f));
-      }
-    }
-    return this;
+      const edge = d2 - d1;
+      if (edge < 0.7) return shade(line, 0.9 + this.r() * 0.2);
+      // light from top-left: pixels on the upper-left side of a stone are brighter
+      const lightF = (-bx - by) / (d1 + 0.5) * 0.08;
+      const rim = edge < 1.3 ? -0.08 : 0;
+      return shade(c, 1.06 - d1 * 0.035 + lightF + rim + (this.r() * 2 - 1) * jitter * 0.4);
+    });
   }
-  // automatic outline + bevel shading for sprites drawn on transparent background
+  // outline + bevel for item sprites (fine resolution)
   outline(darkF = 0.45) {
     const copy = new Uint8ClampedArray(this.d);
-    const A = (x, y) => (x < 0 || y < 0 || x >= TS || y >= TS) ? 0 : copy[(y * TS + x) * 4 + 3];
-    for (let y = 0; y < TS; y++) for (let x = 0; x < TS; x++) {
-      const i = (y * TS + x) * 4;
+    const A = (x, y) => (x < 0 || y < 0 || x >= RES || y >= RES) ? 0 : copy[(y * RES + x) * 4 + 3];
+    for (let y = 0; y < RES; y++) for (let x = 0; x < RES; x++) {
+      const i = (y * RES + x) * 4;
       if (copy[i + 3] === 0) continue;
       const c = [copy[i], copy[i + 1], copy[i + 2], 255];
-      if (!A(x - 1, y) || !A(x, y - 1) || !A(x + 1, y) || !A(x, y + 1)) {
-        // edge pixel: dark outline
-        this.set(x, y, shade(c, darkF));
-      } else if (!A(x - 1, y - 1) || !A(x - 2, y) || !A(x, y - 2)) {
-        this.set(x, y, shade(c, 1.3));
-      } else if (!A(x + 1, y + 1) || !A(x + 2, y) || !A(x, y + 2)) {
-        this.set(x, y, shade(c, 0.78));
-      }
+      if (!A(x - 1, y) || !A(x, y - 1) || !A(x + 1, y) || !A(x, y + 1)) this.setF(x, y, shade(c, darkF));
+      else if (!A(x - 2, y - 2) || !A(x - 3, y) || !A(x, y - 3)) this.setF(x, y, shade(c, 1.28));
+      else if (!A(x + 2, y + 2) || !A(x + 3, y) || !A(x, y + 3)) this.setF(x, y, shade(c, 0.78));
     }
     return this;
   }
-  // rasterize thick line segment
   line(x0, y0, x1, y1, t, c, v = 0.06) {
-    const minX = Math.floor(Math.min(x0, x1) - t), maxX = Math.ceil(Math.max(x0, x1) + t);
-    const minY = Math.floor(Math.min(y0, y1) - t), maxY = Math.ceil(Math.max(y0, y1) + t);
     const dx = x1 - x0, dy = y1 - y0, L = dx * dx + dy * dy || 1;
-    for (let y = minY; y <= maxY; y++) for (let x = minX; x <= maxX; x++) {
-      const px = x + 0.5, py = y + 0.5;
+    const minX = Math.min(x0, x1) - t, maxX = Math.max(x0, x1) + t, minY = Math.min(y0, y1) - t, maxY = Math.max(y0, y1) + t;
+    return this.eachF((px, py) => {
+      if (px < minX || px > maxX || py < minY || py > maxY) return null;
       let tt = ((px - x0) * dx + (py - y0) * dy) / L; tt = Math.max(0, Math.min(1, tt));
       const qx = x0 + tt * dx - px, qy = y0 + tt * dy - py;
-      if (qx * qx + qy * qy <= (t / 2) * (t / 2)) this.set(x, y, shade(c, 1 + (this.r() * 2 - 1) * v));
-    }
-    return this;
+      return qx * qx + qy * qy <= (t / 2) * (t / 2) ? shade(c, 1 + (this.r() * 2 - 1) * v) : null;
+    });
   }
   poly(pts, c, v = 0.06) {
-    for (let y = 0; y < TS; y++) for (let x = 0; x < TS; x++) {
-      const px = x + 0.5, py = y + 0.5;
+    return this.eachF((px, py) => {
       let inside = false;
       for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
         const [xi, yi] = pts[i], [xj, yj] = pts[j];
         if ((yi > py) !== (yj > py) && px < ((xj - xi) * (py - yi)) / (yj - yi) + xi) inside = !inside;
       }
-      if (inside) this.set(x, y, shade(c, 1 + (this.r() * 2 - 1) * v));
-    }
-    return this;
+      return inside ? shade(c, 1 + (this.r() * 2 - 1) * v) : null;
+    });
   }
   circle(cx, cy, r, c, v = 0.06) {
-    for (let y = 0; y < TS; y++) for (let x = 0; x < TS; x++) {
-      const dx = x + 0.5 - cx, dy = y + 0.5 - cy;
-      if (dx * dx + dy * dy <= r * r) this.set(x, y, shade(c, 1 + (this.r() * 2 - 1) * v));
-    }
-    return this;
+    return this.eachF((px, py) => {
+      const dx = px - cx, dy = py - cy;
+      return dx * dx + dy * dy <= r * r ? shade(c, 1 + (this.r() * 2 - 1) * v - (dx + dy) / r * 0.06) : null;
+    });
   }
   mask(rows, map) {
     rows.forEach((row, y) => {
@@ -192,82 +209,130 @@ const TIER_COL = { wooden: hex('#a47d46'), stone: hex('#8f8f8f'), iron: hex('#e1
 
 // ---------- block tile painters ----------
 const P = {};
-P.stone = (p) => { p.noise(C.stone, 0.06).blobs([C.stoneD, C.stoneL], 9, 0.6, 1.6); };
-P.cobblestone = (p) => p.cells(9, [C.stone, C.stoneL, hex('#6e6e72')], hex('#3e3e42'));
-P.mossy_cobblestone = (p) => { P.cobblestone(p); p.blobs([hex('#4f7a2e'), hex('#5f8f37')], 9, 0.8, 1.8); };
-P.dirt = (p) => p.noise(C.dirt, 0.1).specks(C.dirtD, 18).specks(C.dirtL, 10).specks(hex('#8f8f8f'), 3);
-P.grass_top = (p) => p.noise(C.grass, 0.12).specks(C.grassD, 30).specks(C.grassL, 20);
-P.grass_side = (p) => {
-  P.dirt(p);
-  for (let x = 0; x < TS; x++) {
-    const h = 3 + Math.floor(p.r() * 3) + (x % 3 === 0 ? 1 : 0);
-    for (let y = 0; y < h; y++) p.set(x, y, shade(y === h - 1 ? C.grassD : C.grass, 0.9 + p.r() * 0.2));
-  }
+P.stone = (p) => {
+  p.noise(C.stone, 0.05).blobs([C.stoneD, C.stoneL, hex('#86868a')], 11, 0.5, 1.7);
+  // fine hairline cracks
+  for (let i = 0; i < 3; i++) { let x = p.r() * 16, y = p.r() * 16; for (let k = 0; k < 6; k++) { const nx = x + (p.r() - 0.4) * 2.2, ny = y + (p.r() - 0.5) * 2.2; p.line(x, y, nx, ny, 0.45, shade(C.stoneD, 0.85), 0.03); x = nx; y = ny; } }
+  p.specks(C.stoneL, 10);
 };
-P.snowy_grass_side = (p) => {
-  P.dirt(p);
-  for (let x = 0; x < TS; x++) {
-    const h = 3 + Math.floor(p.r() * 3);
-    for (let y = 0; y < h; y++) p.set(x, y, shade(C.snow, 0.92 + p.r() * 0.08));
-  }
+P.cobblestone = (p) => p.cells(9, [C.stone, C.stoneL, hex('#6e6e72'), hex('#8a8a8e')], hex('#3a3a3e'));
+P.mossy_cobblestone = (p) => { P.cobblestone(p); p.blobs([hex('#4f7a2e'), hex('#5f8f37'), hex('#6aa040')], 10, 0.7, 1.9); };
+P.dirt = (p) => {
+  p.noise(C.dirt, 0.1).blobs([C.dirtD, hex('#6a4a30')], 8, 0.5, 1.3);
+  p.specks(C.dirtD, 20).specks(C.dirtL, 12);
+  for (let i = 0; i < 4; i++) { const x = p.r() * 15, y = p.r() * 15; p.circle(x, y, 0.55, hex('#8f8a84'), 0.1); }
 };
-P.snow = (p) => p.noise(C.snow, 0.03).specks(hex('#dfe8f2'), 14);
-P.ice = (p) => { p.noise(C.ice, 0.05); for (let i = 0; i < 4; i++) { const x = Math.floor(p.r() * 12); p.line(x, 2 + p.r() * 4, x + 4, 6 + p.r() * 8, 1, hex('#d8ecff')); } };
+P.grass_top = (p) => {
+  p.noise(C.grass, 0.1);
+  // little blades of grass, lit from the top-left
+  for (let i = 0; i < 90; i++) {
+    const x = p.r() * 16, y = p.r() * 16, l = 0.6 + p.r() * 0.9, a = -0.6 + p.r() * 1.2;
+    const col = p.r() < 0.5 ? C.grassL : p.r() < 0.5 ? C.grassD : shade(C.grass, 1.12);
+    p.line(x, y, x + Math.sin(a) * l, y - Math.cos(a) * l, 0.5, col, 0.05);
+  }
+  p.specks(hex('#8ad15a'), 6);
+};
+function grassOverhang(p, top, dark) {
+  const edge = [];
+  for (let fx = 0; fx < RES; fx++) edge.push(4 + Math.floor(p.r() * 5) + (fx % 7 === 0 ? 3 : 0) + (fx % 11 === 3 ? 2 : 0));
+  p.eachF((ux, uy, fx, fy) => {
+    const h = edge[fx];
+    if (fy < h - 1) return shade(top, 0.9 + p.r() * 0.2 - fy * 0.008);
+    if (fy === h - 1) return shade(dark, 0.95 + p.r() * 0.1);
+    if (fy === h && p.r() < 0.5) return shade(C.dirtD, 0.8);
+    return null;
+  });
+}
+P.grass_side = (p) => { P.dirt(p); grassOverhang(p, C.grass, C.grassD); };
+P.snowy_grass_side = (p) => { P.dirt(p); grassOverhang(p, C.snow, hex('#cfdbe8')); };
+P.snow = (p) => p.noise(C.snow, 0.025).specks(hex('#dfe8f2'), 16).specks(hex('#ffffff'), 10);
+P.ice = (p) => { p.noise(C.ice, 0.04); for (let i = 0; i < 5; i++) { const x = p.r() * 12; p.line(x, 2 + p.r() * 4, x + 4, 6 + p.r() * 8, 0.5, hex('#e2f2ff')); } p.specks(hex('#c8e2ff'), 10); };
 P.bedrock = (p) => p.noise(hex('#4a4a4a'), 0.15).blobs([hex('#2a2a2a'), hex('#6a6a6a'), hex('#1d1d1d')], 14, 0.8, 2);
-P.sand = (p) => p.noise(C.sand, 0.06).specks(C.sandD, 22).specks(hex('#eee2b0'), 10);
-P.gravel = (p) => p.cells(14, [hex('#8a8380'), hex('#6f6865'), hex('#9a948f'), hex('#5e5a58')], hex('#4a4644'), 0.3);
-P.sandstone = (p) => { p.noise(hex('#d6c88d'), 0.04); for (const y of [3, 4, 9, 13]) p.rect(0, y, 16, 1, hex('#c3b278'), 0.05); p.rect(0, 15, 16, 1, hex('#b3a26a')); };
-P.sandstone_top = (p) => p.noise(hex('#dccf96'), 0.05).specks(hex('#c8b97e'), 14);
+P.sand = (p) => {
+  p.noise(C.sand, 0.04);
+  p.eachF((ux, uy) => { const w = Math.sin(uy * 1.4 + Math.sin(ux * 0.7) * 1.5); return w > 0.85 ? shade(C.sand, 0.94) : null; });
+  p.specks(C.sandD, 26).specks(hex('#f2e8bc'), 14).specks(hex('#b8a070'), 4);
+};
+P.gravel = (p) => p.cells(16, [hex('#8a8380'), hex('#6f6865'), hex('#9a948f'), hex('#5e5a58'), hex('#7a7068')], hex('#45403e'), 0.3);
+P.sandstone = (p) => { p.noise(hex('#d6c88d'), 0.035); for (const y of [3, 4, 9, 13]) p.rect(0, y, 16, 1, hex('#c3b278'), 0.05); p.rect(0, 15, 16, 1, hex('#b3a26a')); p.rect(0, 0, 16, 0.5, hex('#e2d6a2')); p.specks(hex('#c8b97e'), 10); };
+P.sandstone_top = (p) => p.noise(hex('#dccf96'), 0.04).specks(hex('#c8b97e'), 16).specks(hex('#ece2b2'), 8);
 function planks(p, base) {
-  p.noise(base, 0.05);
+  p.noise(base, 0.035);
+  // wood grain
+  p.eachF((ux, uy) => {
+    const g = Math.sin(ux * 2.1 + Math.sin(uy * 3.1 + ux * 0.3) * 1.6 + Math.floor(uy / 4) * 2.3);
+    return g > 0.75 ? shade(base, 0.9 + p.r() * 0.04) : g < -0.9 ? shade(base, 1.06) : null;
+  });
   for (let row = 0; row < 4; row++) {
     const y0 = row * 4;
-    p.rect(0, y0 + 3, 16, 1, shade(base, 0.62));
+    p.rect(0, y0 + 3.5, 16, 0.5, shade(base, 0.55));
+    p.rect(0, y0, 16, 0.5, shade(base, 1.12));
     const off = row % 2 ? 4 : 11;
-    p.rect(off, y0, 1, 3, shade(base, 0.7));
-    for (let k = 0; k < 3; k++) { const x = Math.floor(p.r() * 14); p.rect(x, y0 + Math.floor(p.r() * 3), 2 + Math.floor(p.r() * 3), 1, shade(base, 0.86)); }
+    p.rect(off, y0, 0.5, 3.5, shade(base, 0.62)); p.rect(off + 0.5, y0, 0.5, 3.5, shade(base, 1.08));
+    // nail heads
+    p.rect(off - 1.5, y0 + 1.5, 0.5, 0.5, shade(base, 0.5)); p.rect(off + 1.5, y0 + 1.5, 0.5, 0.5, shade(base, 0.5));
   }
 }
 P.oak_planks = (p) => planks(p, C.oak);
 P.birch_planks = (p) => planks(p, C.birchP);
 P.spruce_planks = (p) => planks(p, C.spruceP);
 function logSide(p, base, dark) {
-  for (let x = 0; x < TS; x++) {
-    const f = 0.85 + p.r() * 0.3;
-    for (let y = 0; y < TS; y++) p.set(x, y, shade(x % 4 === 0 || p.r() < 0.12 ? dark : base, f * (0.94 + p.r() * 0.12)));
-  }
+  const cols = [];
+  for (let fx = 0; fx < RES; fx++) cols.push(0.82 + p.r() * 0.3);
+  p.eachF((ux, uy, fx) => {
+    const furrow = Math.sin(ux * 1.6 + Math.sin(uy * 0.45 + fx * 0.2) * 1.2);
+    const c = furrow > 0.55 ? dark : base;
+    return shade(c, cols[fx] * (0.93 + p.r() * 0.12) * (furrow < -0.8 ? 1.12 : 1));
+  });
 }
 function logTop(p, inner, bark) {
-  for (let y = 0; y < TS; y++) for (let x = 0; x < TS; x++) {
-    const d = Math.max(Math.abs(x - 7.5), Math.abs(y - 7.5));
-    if (d > 6.5) p.set(x, y, shade(bark, 0.9 + p.r() * 0.2));
-    else p.set(x, y, shade(inner, (Math.floor(d) % 2 ? 0.86 : 1) * (0.95 + p.r() * 0.1)));
-  }
+  p.eachF((ux, uy) => {
+    const dx = ux - 8, dy = uy - 8;
+    const d = Math.sqrt(dx * dx + dy * dy) + Math.sin(Math.atan2(dy, dx) * 5) * 0.25;
+    const sq = Math.max(Math.abs(dx), Math.abs(dy));
+    if (sq > 7) return shade(bark, 0.85 + p.r() * 0.25);
+    const ring = Math.sin(d * 2.2);
+    return shade(inner, (ring > 0.6 ? 0.82 : 1) * (0.95 + p.r() * 0.08) * (1.04 - d * 0.012));
+  });
 }
 P.oak_log = (p) => logSide(p, C.bark, C.barkD);
 P.oak_log_top = (p) => logTop(p, C.oak, C.bark);
 P.birch_log = (p) => {
-  p.noise(C.birch, 0.04);
-  for (let i = 0; i < 7; i++) { const x = Math.floor(p.r() * 13), y = Math.floor(p.r() * 16); p.rect(x, y, 2 + Math.floor(p.r() * 3), 1, hex('#2e2a26')); }
+  p.noise(C.birch, 0.035);
+  p.eachF((ux, uy) => (Math.sin(uy * 3.3 + Math.sin(ux) * 0.5) > 0.93 ? shade(C.birch, 0.86) : null));
+  for (let i = 0; i < 8; i++) { const x = p.r() * 13, y = p.r() * 15.5; p.rect(x, y, 1.5 + p.r() * 2.5, 0.5 + (p.r() < 0.4 ? 0.5 : 0), hex('#2e2a26')); }
 };
 P.birch_log_top = (p) => logTop(p, hex('#d6c486'), C.birch);
 P.spruce_log = (p) => logSide(p, C.spruce, hex('#24190e'));
 P.spruce_log_top = (p) => logTop(p, C.spruceP, C.spruce);
 function leaves(p, base) {
-  for (let y = 0; y < TS; y++) for (let x = 0; x < TS; x++) {
-    const r = p.r();
-    if (r < 0.14) p.set(x, y, T);
-    else p.set(x, y, shade(base, r < 0.35 ? 0.72 : r > 0.88 ? 1.25 : 0.95 + p.r() * 0.1));
+  p.clear();
+  // clusters of small leaves, each with a light and a dark side
+  for (let i = 0; i < 150; i++) {
+    const x = p.r() * 16, y = p.r() * 16, r = 0.55 + p.r() * 0.6;
+    const f = 0.78 + p.r() * 0.35;
+    p.eachF((ux, uy) => {
+      let dx = ux - x, dy = uy - y;
+      if (dx > 8) dx -= 16; if (dx < -8) dx += 16; if (dy > 8) dy -= 16; if (dy < -8) dy += 16;
+      const d = Math.sqrt(dx * dx * 1.3 + dy * dy);
+      if (d > r) return null;
+      return shade(base, f * (1.12 - (dx + dy) / r * 0.12 - d / r * 0.15));
+    });
   }
+  // sparse holes keep it airy
+  for (let i = 0; i < 40; i++) { const fx = Math.floor(p.r() * RES), fy = Math.floor(p.r() * RES); p.setF(fx, fy, T); p.setF((fx + 1) % RES, fy, T); p.setF(fx, (fy + 1) % RES, T); }
+  p.specks(shade(base, 1.35), 8);
 }
 P.oak_leaves = (p) => leaves(p, C.leaf);
 P.birch_leaves = (p) => leaves(p, C.birchLeaf);
 P.spruce_leaves = (p) => leaves(p, C.spruceLeaf);
 P.glass = (p) => {
   p.clear();
+  p.eachF((ux, uy) => [210, 235, 245, 28]);
   p.border(hex('#d7eef4'));
-  for (let i = 0; i < 4; i++) p.set(3 + i, 3 + i, [255, 255, 255, 200]);
-  p.set(4, 3, [255, 255, 255, 200]); p.set(11, 10, [230, 245, 250, 180]); p.set(12, 11, [230, 245, 250, 180]);
+  p.rect(0.5, 0.5, 15, 0.5, [255, 255, 255, 255]);
+  p.line(3, 6, 6, 3, 0.6, [255, 255, 255, 210]); p.line(3.5, 8.5, 8.5, 3.5, 0.4, [255, 255, 255, 170]);
+  p.line(10, 13, 13, 10, 0.5, [235, 248, 252, 170]);
 };
 function oreTile(color, dark) { return (p) => { P.stone(p); p.ore(color, dark, 6); }; }
 P.coal_ore = oreTile(hex('#1c1c1e'), hex('#000000'));
@@ -276,18 +341,15 @@ P.gold_ore = oreTile(C.gold, hex('#b88f12'));
 P.diamond_ore = oreTile(C.diamond, hex('#1f9993'));
 P.copper_ore = oreTile(C.copper, hex('#4c9a7a'));
 P.lapis_ore = oreTile(C.lapis, hex('#162b70'));
-P.water = (p) => {
-  for (let y = 0; y < TS; y++) for (let x = 0; x < TS; x++) {
-    const w = Math.sin((x + y * 0.5) * 0.8) * 0.06 + Math.sin(y * 1.3 - x * 0.4) * 0.05;
-    const c = shade(C.water, 1 + w + p.r() * 0.05); c[3] = 175; p.set(x, y, c);
-  }
-};
-P.lava = (p) => {
-  for (let y = 0; y < TS; y++) for (let x = 0; x < TS; x++) {
-    const w = Math.sin(x * 0.9 + Math.cos(y * 0.7) * 2) * 0.5 + 0.5;
-    p.set(x, y, mix(hex('#c8321a'), hex('#ffb12a'), w * 0.8 + p.r() * 0.2));
-  }
-};
+P.water = (p) => p.eachF((ux, uy) => {
+  const w = Math.sin((ux + uy * 0.5) * 0.8) * 0.06 + Math.sin(uy * 1.3 - ux * 0.4) * 0.05 + Math.sin(ux * 2.1 + uy * 1.7) * 0.03;
+  const c = shade(C.water, 1 + w + p.r() * 0.04); c[3] = 170; return c;
+});
+P.lava = (p) => p.eachF((ux, uy) => {
+  const w = Math.sin(ux * 0.9 + Math.cos(uy * 0.7) * 2) * 0.5 + 0.5 + Math.sin(ux * 2.3 - uy * 1.9) * 0.15;
+  const crust = Math.sin(ux * 1.7 + uy * 0.6) * Math.sin(uy * 1.3 - ux * 0.4) > 0.55;
+  return crust ? mix(hex('#5a1a0a'), hex('#a8321a'), p.r()) : mix(hex('#c8321a'), hex('#ffd04a'), Math.min(1, w * 0.85 + p.r() * 0.15));
+});
 P.cactus_side = (p) => {
   p.noise(hex('#4b8f2f'), 0.06);
   for (const x of [0, 15]) p.rect(x, 0, 1, 16, hex('#2f6620'));
@@ -584,7 +646,7 @@ function paintItem(p, def) {
     p.mask(rows.map((r) => r), { '#': TIER_COL[def.tier] });
     // shift down
     const copy = new Uint8ClampedArray(p.d); p.clear();
-    for (let y = 0; y < TS - off; y++) for (let x = 0; x < TS; x++) { const i = (y * TS + x) * 4; if (copy[i + 3]) p.set(x, y + off, [copy[i], copy[i + 1], copy[i + 2], 255]); }
+    for (let y = 0; y < RES - off * K; y++) for (let x = 0; x < RES; x++) { const i = (y * RES + x) * 4; if (copy[i + 3]) p.setF(x, y + off * K, [copy[i], copy[i + 1], copy[i + 2], 255]); }
     p.outline();
     return;
   }
@@ -599,15 +661,15 @@ export function tileIndex(name) {
 
 export function buildAtlas() {
   const canvas = document.createElement('canvas');
-  canvas.width = ATLAS_PX; canvas.height = ATLAS_PX;
+  canvas.width = RES * ATLAS_COLS; canvas.height = RES * ATLAS_COLS;
   const ctx = canvas.getContext('2d');
   let idx = 0;
   const put = (name, painter) => {
     if (tiles.has(name)) return;
     const p = new Px(name);
     painter(p);
-    const img = new ImageData(p.d, TS, TS);
-    ctx.putImageData(img, (idx % ATLAS_COLS) * TS, Math.floor(idx / ATLAS_COLS) * TS);
+    const img = new ImageData(p.d, RES, RES);
+    ctx.putImageData(img, (idx % ATLAS_COLS) * RES, Math.floor(idx / ATLAS_COLS) * RES);
     tiles.set(name, idx++);
   };
   put('missing', P.missing);
@@ -621,6 +683,23 @@ export function buildAtlas() {
 }
 
 export function getAtlasCanvas() { return atlasCanvas; }
+
+// Mip levels built by halving the whole atlas; every tile is a power of two and aligned,
+// so a 2x downscale never mixes neighbouring tiles (no colour bleeding at distance).
+export function buildMipmaps(canvas) {
+  const levels = [canvas];
+  let cur = canvas;
+  while (cur.width / ATLAS_COLS > 1) {
+    const n = document.createElement('canvas');
+    n.width = cur.width / 2; n.height = cur.height / 2;
+    const ctx = n.getContext('2d');
+    ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'low';
+    ctx.drawImage(cur, 0, 0, n.width, n.height);
+    levels.push(n);
+    cur = n;
+  }
+  return levels;
+}
 
 // UV rectangle (u0,v0,u1,v1) for a tile in GL coordinates (v flipped)
 export function tileUV(name) {
@@ -644,7 +723,7 @@ export function blockFaceTile(id, face) {
 const iconCache = new Map();
 function drawTile(ctx, name, dx, dy, size) {
   const i = tileIndex(name);
-  ctx.drawImage(atlasCanvas, (i % ATLAS_COLS) * TS, Math.floor(i / ATLAS_COLS) * TS, TS, TS, dx, dy, size, size);
+  ctx.drawImage(atlasCanvas, (i % ATLAS_COLS) * RES, Math.floor(i / ATLAS_COLS) * RES, RES, RES, dx, dy, size, size);
 }
 export function itemTileName(id) {
   const d = ITEMS[id];
@@ -654,7 +733,7 @@ export function itemTileName(id) {
 }
 export function getIcon(id) {
   if (iconCache.has(id)) return iconCache.get(id);
-  const S = 48;
+  const S = 64;
   const c = document.createElement('canvas');
   c.width = S; c.height = S;
   const ctx = c.getContext('2d');
@@ -665,14 +744,14 @@ export function getIcon(id) {
     // isometric cube
     const top = blockFaceTile(id, 2), side = blockFaceTile(id, 0);
     const front = b.tex.front || side;
-    const s = 16;
-    const off = document.createElement('canvas'); off.width = 16; off.height = 16;
+    const s = 32;
+    const off = document.createElement('canvas'); off.width = 32; off.height = 32;
     const oc = off.getContext('2d');
     const face = (name, a, bb, cc, dd, e, f, dark) => {
-      oc.clearRect(0, 0, 16, 16);
+      oc.clearRect(0, 0, 32, 32);
       const i = tileIndex(name);
-      oc.drawImage(atlasCanvas, (i % ATLAS_COLS) * TS, Math.floor(i / ATLAS_COLS) * TS, TS, TS, 0, 0, 16, 16);
-      if (dark) { oc.globalCompositeOperation = 'source-atop'; oc.fillStyle = `rgba(0,0,0,${dark})`; oc.fillRect(0, 0, 16, 16); oc.globalCompositeOperation = 'source-over'; }
+      oc.drawImage(atlasCanvas, (i % ATLAS_COLS) * RES, Math.floor(i / ATLAS_COLS) * RES, RES, RES, 0, 0, 32, 32);
+      if (dark) { oc.globalCompositeOperation = 'source-atop'; oc.fillStyle = `rgba(0,0,0,${dark})`; oc.fillRect(0, 0, 32, 32); oc.globalCompositeOperation = 'source-over'; }
       ctx.setTransform(a, bb, cc, dd, e, f);
       ctx.drawImage(off, 0, 0);
     };

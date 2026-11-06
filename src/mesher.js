@@ -103,7 +103,9 @@ export function buildChunkMesh(world, chunk) {
       const L = [ps[i] / 15, pl[i] / 15, 0.95];
       const [u0, v0, u1, v1] = uvOf(blockFaceTile(id, 0));
       const uvs = [[u0, v0], [u1, v0], [u0, v1], [u1, v1]];
-      const lts = [L, L, L, L];
+      const sway = def.key !== 'ladder' && !def.key.endsWith('mushroom') && def.key !== 'glutpilz';
+      const LT = sway ? [L[0], L[1], L[2] + 10] : L;
+      const lts = [L, L, LT, LT];
       let ex = 0, ez = 0;
       if (id === B.tall_grass || def.key.startsWith('wheat')) { ex = ((wx * 31 + wz * 17) % 7) / 40 - 0.075; ez = ((wx * 13 + wz * 29) % 7) / 40 - 0.075; }
       const a = 0.15, bb = 0.85;
@@ -136,6 +138,7 @@ export function buildChunkMesh(world, chunk) {
     }
 
     const isLiquid = shape === 'liquid';
+    const waveAdd = def.key.endsWith('leaves') ? 10 : 0;
     const buf = id === B.water ? water : solid;
     let top = 1, inset = 0, bottom = 0;
     if (isLiquid && pb[pidx(x, y + 1, z)] !== id) top = 0.875;
@@ -180,7 +183,7 @@ export function buildChunkMesh(world, chunk) {
         const vl = vertLight(x, y, z, f, c);
         const ao = isLiquid ? 1 : AO_CURVE[vl[2]];
         aoSum[k] = vl[2];
-        lts.push([vl[0], vl[1], ao * F.shade]);
+        lts.push([vl[0], vl[1], ao * F.shade + waveAdd]);
       }
       const flip = aoSum[0] + aoSum[3] < aoSum[1] + aoSum[2];
       buf.quad(verts, uvs, lts, flip);

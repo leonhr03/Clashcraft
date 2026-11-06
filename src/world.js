@@ -180,6 +180,16 @@ export class World {
     this._bfs(sky, blocks, queueS);
     this._bfs(blk, blocks, queueB);
     c.lightDirty = false;
+    // remember which neighbours contributed; neighbours that were lit without us get relit once
+    let mask = 0;
+    nb.forEach(([dx, dz], i) => {
+      const n = this.chunks.get((c.cx + dx) + ',' + (c.cz + dz));
+      if (!n || n.lightDirty) return;
+      mask |= 1 << i;
+      const back = i ^ 1; // opposite direction index
+      if (!(n.lightMask & (1 << back))) { n.lightDirty = true; n.dirty = true; }
+    });
+    c.lightMask = mask;
   }
 
   _bfs(light, blocks, q) {
