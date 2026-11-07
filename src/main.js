@@ -8,7 +8,7 @@ import { initAudio, setVolume } from './audio.js';
 const $ = (id) => document.getElementById(id);
 const DEFAULTS = {
   renderDist: 4, fov: 75, sensitivity: 1, pixelRatio: 1, viewBob: true, autoJump: true, clouds: true,
-  volume: 0.6, mobs: true, hostile: true, keepInventory: false, dayLength: 1200, outline: true, showHand: true, shaders: true, postfx: true,
+  volume: 0.6, mobs: true, hostile: true, keepInventory: false, dayLength: 1200, outline: true, showHand: true, shaders: true, postfx: true, compat: false,
 };
 const settings = Object.assign({}, DEFAULTS, loadSettings());
 setVolume(settings.volume);
@@ -111,6 +111,7 @@ const SETTING_DEFS = [
   ['dayLength', 'Tageslänge (Sek.)', 300, 2400, 60],
   ['shaders', 'Shader (Schatten, Wasser, Wind)'],
   ['postfx', 'Shader-Effekte (Leuchten, Lichtstrahlen, Filmlook)'],
+  ['compat', 'Kompatibler Grafikmodus (bei Grafikfehlern)'],
   ['autoJump', 'Automatisch springen'],
   ['viewBob', 'Kamerawackeln'],
   ['clouds', 'Wolken'],

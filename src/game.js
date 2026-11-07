@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { World, CS, CH } from './world.js';
 import { buildChunkMesh } from './mesher.js';
-import { buildAtlas, buildMipmaps, tileUV } from './textures.js';
+import { buildAtlas, tileUV } from './textures.js';
 import { BLOCKS, ITEMS, B, I, SOLID, itemByKey } from './blocks.js';
 import { Player } from './player.js';
 import { EntityManager, itemGeometry } from './entities.js';
@@ -49,6 +49,40 @@ void main(){
   vDist = length(mv.xyz);
   gl_Position = projectionMatrix * mv;
 }`;
+// simple fallback shaders (work on every device)
+const SIMPLE_VERT = `
+attribute vec3 lt;
+varying vec2 vUv;
+varying vec3 vLt;
+varying float vDist;
+void main(){
+  vUv = uv; vLt = lt;
+  if (vLt.z > 5.0) vLt.z -= 10.0;
+  vec4 mv = modelViewMatrix * vec4(position, 1.0);
+  vDist = length(mv.xyz);
+  gl_Position = projectionMatrix * mv;
+}`;
+const SIMPLE_FRAG = `
+uniform sampler2D map;
+uniform float uDay, uFogNear, uFogFar, uAlpha, uAlphaTest, uAmb;
+uniform vec3 uFog, uAmbCol;
+varying vec2 vUv;
+varying vec3 vLt;
+varying float vDist;
+void main(){
+  vec4 c = texture2D(map, vUv);
+  if (c.a < uAlphaTest) discard;
+  float sky = vLt.x * uDay;
+  float ls = pow(0.82, 15.0 * (1.0 - sky));
+  float lb = pow(0.82, 15.0 * (1.0 - vLt.y));
+  vec3 light = max(vec3(ls), vec3(lb) * vec3(1.0, 0.9, 0.75));
+  light = max(light, uAmbCol * uAmb);
+  vec3 col = c.rgb * light * vLt.z;
+  float f = clamp((vDist - uFogNear) / (uFogFar - uFogNear), 0.0, 1.0);
+  gl_FragColor = vec4(mix(col, uFog, f), c.a * uAlpha);
+  #include <colorspace_fragment>
+}`;
+
 const FRAG = `
 uniform sampler2D map;
 uniform sampler2D uShadowMap;
@@ -142,9 +176,8 @@ export class Game {
     const atlas = buildAtlas();
     this.atlasTex = new THREE.CanvasTexture(atlas);
     this.atlasTex.magFilter = THREE.NearestFilter;
-    this.atlasTex.mipmaps = buildMipmaps(atlas);
-    this.atlasTex.minFilter = THREE.NearestMipmapLinearFilter;
-    this.atlasTex.generateMipmaps = false; this.atlasTex.colorSpace = THREE.SRGBColorSpace;
+    this.atlasTex.colorSpace = THREE.SRGBColorSpace;
+    this.setTextureFiltering(!settings.compat);
     // shadow map (sun) used by the shader mode
     const SR = settings.shadowRes || 1024;
     this.shadowRT = new THREE.WebGLRenderTarget(SR, SR, { depthTexture: new THREE.DepthTexture(SR, SR), depthBuffer: true });
@@ -189,6 +222,9 @@ export class Game {
     this.lastFrame = performance.now();
     this.fpsAcc = 0; this.fpsN = 0; this.fps = 0;
     this.post = new PostFX(this.renderer);
+    this.shadowsOk = true;
+    this.fancy = true;
+    if (settings.compat) this.useSimpleShaders();
     this.sunScreen = new THREE.Vector2();
     this.resize();
     window.addEventListener('resize', () => this.resize());
@@ -202,7 +238,85 @@ export class Game {
     if (this.post) this.post.setSize(w, h);
   }
 
+  setTextureFiltering(mips) {
+    const t = this.atlasTex;
+    t.mipmaps = [];
+    t.generateMipmaps = !!mips;
+    t.minFilter = mips ? THREE.NearestMipmapLinearFilter : THREE.NearestFilter;
+    t.magFilter = THREE.NearestFilter;
+    t.needsUpdate = true;
+  }
+
+  useSimpleShaders() {
+    this.fancy = false;
+    for (const m of [this.solidMat, this.waterMat]) {
+      m.vertexShader = SIMPLE_VERT; m.fragmentShader = SIMPLE_FRAG; m.needsUpdate = true;
+    }
+  }
+
+  // run once after the first rendered frame: fall back if the device cannot run the effects
+  verifyGraphics() {
+    if (this._verified) return;
+    this._verified = true;
+    const r = this.renderer, gl = r.getContext();
+    const notes = [];
+    if (this.fancy) {
+      for (const m of [this.solidMat, this.waterMat]) {
+        const prog = r.properties.get(m).currentProgram;
+        if (prog && prog.diagnostics && prog.diagnostics.runnable === false) {
+          console.warn('chunk shader failed', prog.diagnostics);
+          this.useSimpleShaders(); notes.push('Shader'); break;
+        }
+      }
+    }
+    const fboOk = (rt) => {
+      try {
+        r.setRenderTarget(rt);
+        const ok = gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE;
+        r.setRenderTarget(null);
+        return ok;
+      } catch (e) { r.setRenderTarget(null); return false; }
+    };
+    if (!fboOk(this.shadowRT)) { this.shadowsOk = false; notes.push('Schatten'); }
+    if (!fboOk(this.post.main)) {
+      this.post.useLowPrecision();
+      if (!fboOk(this.post.main)) { this.post.ok = false; notes.push('Effekte'); }
+    }
+    if (gl.getError() === gl.OUT_OF_MEMORY) { this.post.ok = false; notes.push('Speicher'); }
+    if (!this.textureSelfTest()) {
+      this.setTextureFiltering(false);
+      if (!this.textureSelfTest()) { this.useSimpleShaders(); this.post.ok = false; }
+      notes.push('Mipmaps');
+    }
+    if (notes.length) this.ui.toast('Grafik angepasst – auf diesem Gerät nicht verfügbar: ' + notes.join(', '), 5000);
+  }
+
+  // render a minified stone tile with the atlas and read it back; false if the texture samples as empty
+  textureSelfTest() {
+    const r = this.renderer;
+    try {
+      const rt = new THREE.WebGLRenderTarget(4, 4);
+      const geo = new THREE.PlaneGeometry(2, 2);
+      const [u0, v0, u1, v1] = tileUV('stone');
+      const uv = geo.attributes.uv;
+      for (let i = 0; i < 4; i++) uv.setXY(i, uv.getX(i) ? u1 : u0, uv.getY(i) ? v1 : v0);
+      const mat = new THREE.MeshBasicMaterial({ map: this.atlasTex, alphaTest: 0.5 });
+      const sc = new THREE.Scene(); sc.add(new THREE.Mesh(geo, mat));
+      const cam = new THREE.OrthographicCamera(-1, 1, 1, -1, -1, 1);
+      r.setRenderTarget(rt); r.setClearColor(0x000000, 0); r.clear(); r.render(sc, cam);
+      const buf = new Uint8Array(4 * 4 * 4);
+      r.readRenderTargetPixels(rt, 0, 0, 4, 4, buf);
+      r.setRenderTarget(null); r.setClearColor(0x000000, 1);
+      rt.dispose(); geo.dispose(); mat.dispose();
+      let sum = 0, alpha = 0;
+      for (let i = 0; i < 16; i++) { sum += buf[i * 4] + buf[i * 4 + 1] + buf[i * 4 + 2]; alpha += buf[i * 4 + 3]; }
+      return alpha / 16 > 128 && sum / 16 > 60;
+    } catch (e) { r.setRenderTarget(null); return true; }
+  }
+
   applySettings() {
+    this.setTextureFiltering(!this.settings.compat);
+    if (this.settings.compat && this.fancy) this.useSimpleShaders();
     const s = this.settings;
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, s.pixelRatio || 1));
     this.camera.fov = s.fov || 75; this.camera.updateProjectionMatrix();
@@ -990,7 +1104,7 @@ export class Game {
 
   // ------------- sun shadows (shader mode) -------------
   renderShadows() {
-    const on = this.settings.shaders !== false && this.dim === 'overworld' && this.ready;
+    const on = this.settings.shaders !== false && !this.settings.compat && this.fancy && this.shadowsOk && this.dim === 'overworld' && this.ready;
     const day = this.dayFactor();
     const active = on && day > 0.3;
     for (const m of [this.solidMat, this.waterMat]) m.uniforms.uShadowOn.value = on ? 1 : 0;
@@ -1106,7 +1220,7 @@ export class Game {
     }
     this.updateHand(dt);
     this.renderShadows();
-    const usePost = this.settings.shaders !== false && this.settings.postfx !== false && this.post.ok;
+    const usePost = this.settings.shaders !== false && this.settings.postfx !== false && !this.settings.compat && this.fancy && this.post.ok;
     for (const m of [this.solidMat, this.waterMat]) m.uniforms.uHDR.value = usePost && this.post.hdr ? 1 : 0;
     if (usePost) this.post.begin(); else this.renderer.setRenderTarget(null);
     this.renderer.clear();
@@ -1130,6 +1244,7 @@ export class Game {
         exposure: this.dim === "overworld" ? 0.98 + (1 - dayk) * 0.55 : 1.3, sat: 1.08, tint: this.sky.dome.material.uniforms.uSunCol.value,
       });
     }
+    if (this.ready && !this._verified) this.verifyGraphics();
     this.ui.frame(dt);
   }
 }

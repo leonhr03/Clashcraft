@@ -126,6 +126,12 @@ export class PostFX {
     });
   }
 
+  useLowPrecision() {
+    this.hdr = false;
+    this.main.dispose();
+    this.main = new THREE.WebGLRenderTarget(this.w || 4, this.h || 4, { type: THREE.UnsignedByteType, depthBuffer: true, depthTexture: new THREE.DepthTexture(this.w || 4, this.h || 4) });
+  }
+
   setSize(w, h) {
     const pr = this.r.getPixelRatio();
     const W = Math.max(4, Math.floor(w * pr)), H = Math.max(4, Math.floor(h * pr));
