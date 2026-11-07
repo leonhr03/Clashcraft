@@ -8,6 +8,7 @@ import { Player } from './player.js';
 import { EntityManager, itemGeometry } from './entities.js';
 import { raycast, rayBox, collides } from './physics.js';
 import { Sky } from './sky.js';
+import { PostFX } from './postfx.js';
 import { SMELT } from './recipes.js';
 import { sfx, initAudio } from './audio.js';
 import { saveWorldMeta, saveChunks, loadChunks } from './save.js';
@@ -52,7 +53,7 @@ const FRAG = `
 uniform sampler2D map;
 uniform sampler2D uShadowMap;
 uniform mat4 uShadowMat;
-uniform float uDay, uFogNear, uFogFar, uAlpha, uAlphaTest, uAmb, uShadowOn, uTime, uTexel;
+uniform float uDay, uFogNear, uFogFar, uAlpha, uAlphaTest, uAmb, uShadowOn, uTime, uTexel, uHDR;
 uniform vec3 uFog, uAmbCol, uSunDir, uSunCol, uSkyCol;
 varying vec2 vUv;
 varying vec3 vLt;
@@ -84,7 +85,7 @@ void main(){
     float outdoor = smoothstep(0.55, 0.95, vLt.x);
     sunStrength = clamp(uDay * 1.5 - 0.35, 0.0, 1.0) * outdoor;
     if (sunStrength > 0.0 && ndl > 0.0) sun = clamp(ndl * 1.4, 0.0, 1.0) * shadowAt(vWorld + N * 0.08);
-    skyL *= mix(1.0, 0.5 + 0.68 * sun, sunStrength);
+    skyL *= mix(1.0, 0.5 + (0.6 + uHDR * 0.22) * sun, sunStrength);
     skyL *= mix(vec3(1.0), uSunCol, sunStrength * sun * 0.4);
     skyL = mix(skyL, skyL * vec3(0.78, 0.86, 1.1), sunStrength * (1.0 - sun) * 0.8);
   }
@@ -158,7 +159,7 @@ export class Game {
       uFogNear: { value: 40 }, uFogFar: { value: 60 }, uAlpha: { value: 1 }, uAlphaTest: { value: 0.5 },
       uAmb: { value: 0.03 }, uAmbCol: { value: new THREE.Color(1, 1, 1) },
       uShadowMap: { value: this.shadowRT.depthTexture }, uShadowMat: { value: this.shadowMat }, uShadowOn: { value: 0 },
-      uTexel: { value: 1 / SR }, uTime: { value: 0 }, uWave: { value: 1 },
+      uTexel: { value: 1 / SR }, uTime: { value: 0 }, uWave: { value: 1 }, uHDR: { value: 0 },
       uSunDir: { value: this.sunDir }, uSunCol: { value: new THREE.Color(1, 0.92, 0.75) }, uSkyCol: { value: new THREE.Color(0x86bdf8) },
     });
     this.solidMat = new THREE.ShaderMaterial({ vertexShader: VERT, fragmentShader: FRAG, uniforms: uniforms() });
@@ -187,6 +188,8 @@ export class Game {
     this.tickTimer = 0; this.saveTimer = 0;
     this.lastFrame = performance.now();
     this.fpsAcc = 0; this.fpsN = 0; this.fps = 0;
+    this.post = new PostFX(this.renderer);
+    this.sunScreen = new THREE.Vector2();
     this.resize();
     window.addEventListener('resize', () => this.resize());
   }
@@ -196,6 +199,7 @@ export class Game {
     this.renderer.setSize(w, h);
     this.camera.aspect = w / h; this.camera.updateProjectionMatrix();
     this.handCam.aspect = w / h; this.handCam.updateProjectionMatrix();
+    if (this.post) this.post.setSize(w, h);
   }
 
   applySettings() {
@@ -1102,11 +1106,29 @@ export class Game {
     }
     this.updateHand(dt);
     this.renderShadows();
+    const usePost = this.settings.shaders !== false && this.settings.postfx !== false && this.post.ok;
+    for (const m of [this.solidMat, this.waterMat]) m.uniforms.uHDR.value = usePost && this.post.hdr ? 1 : 0;
+    if (usePost) this.post.begin(); else this.renderer.setRenderTarget(null);
     this.renderer.clear();
     this.renderer.render(this.scene, this.camera);
     if (this.settings.showHand !== false && !p.dead) {
       this.renderer.clearDepth();
       this.renderer.render(this.handScene, this.handCam);
+    }
+    if (usePost) {
+      // sun position on screen for light shafts
+      const sd = this.sky.sunDir;
+      const v = new THREE.Vector3().copy(this.camera.position).addScaledVector(sd, 300).project(this.camera);
+      const fwd = new THREE.Vector3(); this.camera.getWorldDirection(fwd);
+      const facing = fwd.dot(sd);
+      let vis = this.dim === 'overworld' ? Math.max(0, Math.min(1, sd.y * 5)) * Math.max(0, Math.min(1, facing * 2)) : 0;
+      if (p.headInWater) vis = 0;
+      this.sunScreen.set(v.x * 0.5 + 0.5, v.y * 0.5 + 0.5);
+      const dayk = this.dim === 'overworld' ? day : 0.3;
+      this.post.end({
+        sun: this.sunScreen, sunVis: vis, rays: 0.9, bloom: this.dim === 'overworld' ? 0.32 + (1 - dayk) * 0.25 : 0.5,
+        exposure: this.dim === "overworld" ? 0.98 + (1 - dayk) * 0.55 : 1.3, sat: 1.08, tint: this.sky.dome.material.uniforms.uSunCol.value,
+      });
     }
     this.ui.frame(dt);
   }
