@@ -22,6 +22,9 @@ function show(id) {
   for (const m of ['mainmenu', 'worldlist', 'createworld', 'settings', 'arenamenu', 'deckmenu']) $(m).classList.toggle('hidden', m !== id);
 }
 
+// Android wrapper: portrait for menus and the arena, landscape for the sandbox world
+function setOrientation(mode) { try { if (window.AndroidApp) window.AndroidApp.setOrientation(mode); } catch (e) { /* ignore */ } }
+
 const bind = (id, fn) => $(id).addEventListener('click', (e) => { initAudio(); fn(e); });
 
 bind('mm-play', () => { show('worldlist'); refreshWorlds(); });
@@ -68,6 +71,7 @@ async function quitToMenu() {
   game = null;
   ui.detach();
   ui.paused = false;
+  setOrientation('portrait');
   show('worldlist');
   refreshWorlds();
 }
@@ -95,6 +99,7 @@ async function refreshWorlds() {
 }
 
 async function startWorld(meta) {
+  setOrientation('landscape');
   show(null);
   $('loading').classList.remove('hidden');
   let chunks = new Map();

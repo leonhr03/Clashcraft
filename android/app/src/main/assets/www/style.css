@@ -218,3 +218,12 @@ input { font: 16px var(--ui-font); padding: 8px; background: #000; color: #fff; 
 .dk-grid .ar-card.in { border-color: #7fe07f; box-shadow: 0 0 6px #7fe07f; }
 .dk-grid .ar-card .desc { display: none; }
 #dk-detail { font-size: 13px; min-height: 34px; color: #ffef80; text-align: center; }
+
+/* ---------- Hochformat (Menüs) ---------- */
+@media (orientation: portrait) {
+  .splash { margin: -6px 0 14px 0; font-size: 14px; white-space: normal; text-align: center; }
+  .logo { font-size: clamp(34px, 12vw, 64px); }
+  .deckprev { grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  .menuinner { gap: 10px; }
+  .btn { min-height: 52px; }
+}

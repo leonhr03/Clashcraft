@@ -20,6 +20,8 @@
 2. Datei öffnen und installieren. Beim ersten Mal „Apps aus unbekannten Quellen installieren“ erlauben.
 3. Im Hauptmenü **⚔ Block-Arena** antippen – los geht's!
 
+> Die App läuft im **Hochformat** (Arena und Menüs). Nur die Blockwelt-Sandbox dreht sich automatisch ins Querformat.
+>
 > Benötigt Android 8 oder neuer. Die APK wird bei jedem Push automatisch von GitHub Actions neu gebaut.
 
 ---
