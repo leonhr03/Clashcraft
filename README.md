@@ -1,4 +1,9 @@
-# Blockwelt
+# ClashCraft
+
+**APK herunterladen:** [`apk/ClashCraft.apk`](apk/ClashCraft.apk) (wird bei jedem Push automatisch neu gebaut) –
+oder unter **Releases** die neueste `ClashCraft.apk`.
+
+ClashCraft enthält die **Block-Arena** (3D-Kartenkampf mit Mobs als Karten) und die Sandbox **Blockwelt**.
 
 Ein eigenes 3D-Voxel-Sandbox-Spiel (Abbauen, Bauen, Craften, Überleben) für Android-Handys.
 Alle Texturen, Mobs und Sounds werden prozedural im Code erzeugt – es werden keine fremden Assets verwendet.

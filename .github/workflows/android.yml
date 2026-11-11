@@ -34,21 +34,32 @@ jobs:
           chmod +x gradlew
           echo "sdk.dir=$ANDROID_HOME" > local.properties
           ./gradlew assembleRelease --no-daemon --stacktrace
-          cp app/build/outputs/apk/release/app-release.apk ../Blockwelt.apk
+          cp app/build/outputs/apk/release/app-release.apk ../ClashCraft.apk
 
       - name: APK als Artefakt hochladen
         uses: actions/upload-artifact@v4
         with:
-          name: Blockwelt-APK
-          path: Blockwelt.apk
+          name: ClashCraft-APK
+          path: ClashCraft.apk
+
+      - name: APK ins Repository legen (apk/ClashCraft.apk)
+        if: github.ref == 'refs/heads/main'
+        run: |
+          mkdir -p apk
+          cp ClashCraft.apk apk/ClashCraft.apk
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f apk/ClashCraft.apk
+          git commit -m "APK aktualisiert (Build ${{ github.run_number }}) [skip ci]" || echo "keine Aenderung"
+          git push
 
       - name: Release mit APK veroeffentlichen
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v1.0.${{ github.run_number }}
-          name: Blockwelt 1.0.${{ github.run_number }}
+          name: ClashCraft 1.0.${{ github.run_number }}
           body: |
-            Blockwelt APK fuer Android (ab Android 8).
+            ClashCraft APK fuer Android (ab Android 8): Block-Arena-Kartenkampf + Blockwelt-Sandbox.
             Auf dem Handy herunterladen und installieren ("Installation aus unbekannten Quellen" erlauben).
-          files: Blockwelt.apk
+          files: ClashCraft.apk
           make_latest: true
