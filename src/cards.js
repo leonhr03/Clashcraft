@@ -57,6 +57,12 @@ export const CARDS = {
     hp: 640, dmg: 130, hitSpeed: 1.6, range: 4.5, speed: 0.9, scale: 0.6, radius: 0.4, ranged: 'pumpkin', splash: 1.3, hitsAir: true,
     desc: 'Dorfbewohner, der Kürbisse mit Flächenschaden wirft.',
   },
+  shadow_lord: {
+    name: 'Schattenfürst', mob: 'shadow_lord', cost: 7, type: 'unit', count: 1, legendary: true,
+    hp: 2700, dmg: 240, hitSpeed: 1.7, range: 4.5, speed: 0.8, scale: 0.85, radius: 0.8, air: true, hitsAir: true,
+    ranged: 'orb', splash: 1.6, airHeight: 1.7,
+    desc: 'Legendärer Boss! Schwebt über alles hinweg und schleudert explodierende Seelenkugeln.',
+  },
   powder: {
     name: 'Pulverfass', cost: 4, type: 'spell', radius: 2.4, dmg: 520, towerFactor: 0.35, delay: 0.9,
     desc: 'Explodiert im Zielgebiet und richtet hohen Schaden an.',

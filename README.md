@@ -29,7 +29,11 @@ die Mobs aus Blockwelt sind die Karten.
 - Zwei Bahnen mit Brücken über einen Fluss, je Seite zwei Wachtürme (Skelett-Schütze) und ein Königsturm (Dorfkönig)
 - Energie (max. 10) lädt sich auf; in der letzten Minute doppelt so schnell. 3 Minuten + Verlängerung (nächster Turm entscheidet)
 - 13 Karten: Zombie, Skelett-Schützen, Spinne, Aschezombie, Glutskelett, Leerenkrabbler, Kuh-Koloss, Schweinebande,
-  Hühnerschwarm (fliegt), Wollschaf, Kürbiswerfer, Zauber Pulverfass und Pfeilhagel
+  Hühnerschwarm (fliegt), Wollschaf, Kürbiswerfer, Zauber Pulverfass und Pfeilhagel –
+  und die legendäre Boss-Karte **Schattenfürst** (7 Energie): ein schwebender Obsidian-König mit Krone,
+  der explodierende Seelenkugeln schleudert
+- Shader-Look (an/aus über die Grafik-Einstellungen): weiche Sonnenschatten, Abendsonnen-Licht, Himmel mit Sonne,
+  animiertes Wasser mit Spiegelung und Gischt, Bloom/Leuchten, Lichtstrahlen, Laternen und schwebende Lichtfunken
 - Eigenes 8er-Deck zusammenstellen, Computergegner in 3 Stufen, Pokale für Siege
 - Karte aufs Feld ziehen (oder antippen und dann aufs Feld tippen). Nach Zerstörung eines Gegnerturms darfst du weiter vorne ausspielen.
 - Alles nutzt die eigenen, prozedural erzeugten Blockwelt-Texturen und -Modelle (keine fremden Assets).

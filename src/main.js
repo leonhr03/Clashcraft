@@ -213,7 +213,7 @@ function startArena() {
   if (arena) { arena.dispose(); arena = null; }
   $('ar-quit').classList.remove('confirm'); $('ar-quit').textContent = '✕';
   try {
-    arena = new Arena($('arena'), { deck, difficulty, onEnd: arenaEnded });
+    arena = new Arena($('arena'), { deck, difficulty, settings, onEnd: arenaEnded });
     window.__arena = arena;
   } catch (e) {
     console.error(e);

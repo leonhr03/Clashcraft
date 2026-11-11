@@ -4,6 +4,54 @@ import { buildAtlas, tileUV } from './textures.js';
 import { createMobModel, animateMob, MOB_DEFS } from './models.js';
 import { CARDS, CARD_KEYS } from './cards.js';
 import { sfx } from './audio.js';
+import { PostFX } from './postfx.js';
+
+const SUN_DIR = new THREE.Vector3(-0.6, 0.72, 0.38).normalize();
+
+const SKY_VERT = `
+varying vec3 vDir;
+void main(){ vDir = position; vec4 p = projectionMatrix * modelViewMatrix * vec4(position, 1.0); gl_Position = p.xyww; }`;
+const SKY_FRAG = `
+uniform vec3 uSun;
+varying vec3 vDir;
+void main(){
+  vec3 d = normalize(vDir);
+  float h = max(d.y, 0.0);
+  vec3 col = mix(vec3(1.0, 0.78, 0.55), vec3(0.28, 0.5, 0.92), pow(h, 0.45));
+  float s = max(dot(d, uSun), 0.0);
+  col += vec3(1.0, 0.75, 0.45) * pow(s, 10.0) * 0.7;
+  col += vec3(5.0, 4.2, 3.0) * smoothstep(0.9975, 0.9985, s);
+  gl_FragColor = vec4(col, 1.0);
+  #include <colorspace_fragment>
+}`;
+const WATER_VERT = `
+uniform float uTime;
+varying vec3 vW;
+void main(){
+  vec4 w = modelMatrix * vec4(position, 1.0);
+  w.y += sin(w.x * 1.3 + uTime * 1.7) * 0.035 + cos(w.z * 2.1 + uTime * 1.3) * 0.025;
+  vW = w.xyz;
+  gl_Position = projectionMatrix * viewMatrix * w;
+}`;
+const WATER_FRAG = `
+uniform float uTime;
+uniform vec3 uSun, uCam;
+varying vec3 vW;
+void main(){
+  vec3 n = normalize(vec3(
+    sin(vW.x * 2.0 + uTime * 1.5) * 0.12 + sin(vW.x * 5.3 - uTime * 2.1 + vW.z * 3.0) * 0.06,
+    1.0,
+    cos(vW.z * 3.0 + uTime * 1.2) * 0.12 + cos(vW.x * 4.1 + uTime) * 0.05));
+  vec3 v = normalize(uCam - vW);
+  float fr = pow(1.0 - max(dot(n, v), 0.0), 3.0) * 0.75 + 0.15;
+  vec3 col = mix(vec3(0.03, 0.2, 0.38), vec3(0.62, 0.8, 1.0), fr);
+  vec3 hv = normalize(uSun + v);
+  col += vec3(1.0, 0.85, 0.6) * pow(max(dot(n, hv), 0.0), 90.0) * 2.5;
+  float edge = smoothstep(0.7, 1.0, abs(vW.z));
+  col = mix(col, vec3(0.92, 0.96, 1.0), edge * 0.45 * (0.6 + 0.4 * sin(vW.x * 6.0 + uTime * 2.0)));
+  gl_FragColor = vec4(col, 0.85);
+  #include <colorspace_fragment>
+}`;
 
 // ---------- layout (1 unit = 1 block) ----------
 const HALF_W = 9, HALF_L = 16;
@@ -50,6 +98,7 @@ class BlockBuilder {
     g.setAttribute('uv', new THREE.Float32BufferAttribute(this.uv, 2));
     g.setAttribute('color', new THREE.Float32BufferAttribute(this.col, 3));
     g.setIndex(this.idx);
+    g.computeVertexNormals(); // faces don't share vertices, so these are flat face normals
     return new THREE.Mesh(g, mat);
   }
 }
@@ -134,8 +183,12 @@ export class Arena {
     this.difficulty = opts.difficulty || 1;
     this.onEnd = opts.onEnd;
     this.portraits = getPortraits();
+    const st = opts.settings || {};
+    this.fx = st.shaders !== false && !st.compat;          // shadows, sky, water shader
+    this.wantPost = this.fx && st.postfx !== false;         // bloom, sun rays, filmic look
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+    if (this.fx) { this.renderer.shadowMap.enabled = true; this.renderer.shadowMap.type = THREE.PCFSoftShadowMap; }
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.setClearColor(0x86bdf8);
@@ -143,18 +196,39 @@ export class Arena {
     this.canvas = this.renderer.domElement;
 
     this.scene = new THREE.Scene();
-    this.scene.fog = new THREE.Fog(0x9ec9f2, 60, 120);
-    this.camera = new THREE.PerspectiveCamera(40, 1, 0.1, 200);
-    this.scene.add(new THREE.AmbientLight(0xffffff, 0.8));
-    const dl = new THREE.DirectionalLight(0xffffff, 0.75); dl.position.set(0.5, 1, 0.7); this.scene.add(dl);
+    this.scene.fog = new THREE.Fog(this.fx ? 0xf0c898 : 0x9ec9f2, 60, 120);
+    this.camera = new THREE.PerspectiveCamera(40, 1, 0.1, 300);
+    if (this.fx) {
+      this.scene.add(new THREE.HemisphereLight(0xbcd8ff, 0x6a7a3a, 0.95));
+      const sun = new THREE.DirectionalLight(0xffdcae, 2.1);
+      sun.position.copy(SUN_DIR).multiplyScalar(60);
+      sun.castShadow = true;
+      const sc = sun.shadow.camera;
+      sc.left = -28; sc.right = 28; sc.top = 32; sc.bottom = -32; sc.near = 1; sc.far = 140;
+      sun.shadow.mapSize.set(2048, 2048);
+      sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.03;
+      this.scene.add(sun); this.scene.add(sun.target);
+      // gradient sky dome with sun
+      this.sky = new THREE.Mesh(new THREE.SphereGeometry(200, 24, 12), new THREE.ShaderMaterial({ vertexShader: SKY_VERT, fragmentShader: SKY_FRAG, uniforms: { uSun: { value: SUN_DIR } }, side: THREE.BackSide, depthWrite: false, fog: false }));
+      this.sky.frustumCulled = false; this.sky.renderOrder = -1;
+      this.scene.add(this.sky);
+    } else {
+      this.scene.add(new THREE.AmbientLight(0xffffff, 0.8));
+      const dl = new THREE.DirectionalLight(0xffffff, 0.75); dl.position.set(0.5, 1, 0.7); this.scene.add(dl);
+    }
+    this.post = null;
+    if (this.wantPost) { try { this.post = new PostFX(this.renderer); } catch (e) { this.post = null; } }
 
     const atlas = buildAtlas();
     this.atlasTex = new THREE.CanvasTexture(atlas);
     this.atlasTex.magFilter = THREE.NearestFilter;
     this.atlasTex.minFilter = THREE.NearestMipmapLinearFilter;
     this.atlasTex.colorSpace = THREE.SRGBColorSpace;
-    this.blockMat = new THREE.MeshBasicMaterial({ map: this.atlasTex, vertexColors: true, alphaTest: 0.5 });
-    this.waterMat = new THREE.MeshBasicMaterial({ map: this.atlasTex, vertexColors: true, transparent: true, opacity: 0.8, depthWrite: false });
+    this.blockMat = this.fx ? new THREE.MeshLambertMaterial({ map: this.atlasTex, vertexColors: true, alphaTest: 0.5 }) : new THREE.MeshBasicMaterial({ map: this.atlasTex, vertexColors: true, alphaTest: 0.5 });
+    this.waterMat = this.fx
+      ? new THREE.ShaderMaterial({ vertexShader: WATER_VERT, fragmentShader: WATER_FRAG, uniforms: { uTime: { value: 0 }, uSun: { value: SUN_DIR }, uCam: { value: new THREE.Vector3() } }, transparent: true, depthWrite: false })
+      : new THREE.MeshBasicMaterial({ map: this.atlasTex, vertexColors: true, transparent: true, opacity: 0.8, depthWrite: false });
+    this.glowMats = new Map();
     this.particleGeo = new THREE.BoxGeometry(1, 1, 1);
     this.particleMats = new Map();
 
@@ -287,11 +361,25 @@ export class Arena {
       if (r < 0.75) tree(x, z, rnd() < 0.35 ? 1 : 0);
       else b.block(x, 0, z, r < 0.88 ? TILES.pumpkin : TILES.hay);
     }
-    this.scene.add(b.mesh(this.blockMat));
-    const wm = water.mesh(this.waterMat);
+    const world = b.mesh(this.blockMat);
+    world.castShadow = world.receiveShadow = true;
+    this.scene.add(world);
+    let wm;
+    if (this.fx) {
+      const g = new THREE.PlaneGeometry(44, 2, 88, 4); g.rotateX(-Math.PI / 2);
+      wm = new THREE.Mesh(g, this.waterMat); wm.position.set(0, -0.3, 0);
+    } else wm = water.mesh(this.waterMat);
     wm.renderOrder = 2;
     this.scene.add(wm);
     this.waterMesh = wm;
+    // drifting light motes (they glow with the bloom effect)
+    if (this.fx) {
+      const n = 70, pos = new Float32Array(n * 3);
+      for (let i = 0; i < n; i++) { pos[i * 3] = (Math.random() * 2 - 1) * 14; pos[i * 3 + 1] = 0.5 + Math.random() * 4; pos[i * 3 + 2] = (Math.random() * 2 - 1) * 20; }
+      const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+      this.motes = new THREE.Points(g, new THREE.PointsMaterial({ color: new THREE.Color(2.2, 1.9, 0.9), size: 0.13, transparent: true, opacity: 0.85, depthWrite: false }));
+      this.scene.add(this.motes);
+    }
 
     // deploy-zone overlays (red = forbidden)
     const mk = () => {
@@ -327,7 +415,17 @@ export class Arena {
       b.box(-hw + i + 0.15, h - 2.5, zz, -hw + i + 0.85, h - 0.3, zz + 0.1, TILES.wool[team]);
     }
     const g = new THREE.Group();
-    g.add(b.mesh(this.blockMat));
+    const tm = b.mesh(this.blockMat); tm.castShadow = tm.receiveShadow = true;
+    g.add(tm);
+    // lanterns on the corners
+    const lanterns = [];
+    for (const [lx, lz] of [[-hw + 0.5, -hw + 0.5], [hw - 0.5, -hw + 0.5], [-hw + 0.5, hw - 0.5], [hw - 0.5, hw - 0.5]]) {
+      if (!king && (lx + lz) % 2 !== 0 && (lx > 0) === (lz > 0)) continue;
+      const core = new THREE.Mesh(this.particleGeo, this.glowMat(team === 0 ? [1.4, 1.9, 3.2] : [3.2, 1.5, 0.8]));
+      core.scale.set(0.28, 0.36, 0.28); core.position.set(lx, h + 1.25, lz);
+      const cage = new THREE.Mesh(this.particleGeo, this.colMat(0x2a2a30)); cage.scale.set(0.38, 0.08, 0.38); cage.position.set(lx, h + 1.48, lz);
+      g.add(core, cage); lanterns.push(core);
+    }
     g.position.set(x, 0, z);
     this.scene.add(g);
     // guard on top
@@ -344,10 +442,11 @@ export class Arena {
       guard.parts.head.add(crown);
     }
     g.add(guard.root);
+    guard.root.traverse((o) => { if (o.isMesh) o.castShadow = true; });
     const ent = {
       kind: 'tower', king, team, x, z, hw, h, radius: hw, hp: king ? 2600 : 1500, maxHp: king ? 2600 : 1500,
       dmg: king ? 70 : 55, hitSpeed: king ? 1.0 : 0.8, range: king ? 8 : 7.5, atkCd: 0, active: !king, alive: true,
-      group: g, guard, target: null, flash: 0,
+      group: g, guard, target: null, flash: 0, lanterns,
     };
     this.ents.push(ent);
     this.makeBar(ent);
@@ -425,6 +524,7 @@ export class Arena {
       m.root.scale.setScalar(c.scale * MODEL_SCALE);
       m.root.rotation.y = Math.PI;
       for (const mat of m.mats) { mat.transparent = true; mat.opacity = 0.55; mat.depthWrite = false; }
+      m.root.traverse((o) => { if (o.userData.glow) o.visible = false; });
       m.root.visible = false;
       this.scene.add(m.root);
       this.ghost = m;
@@ -495,7 +595,7 @@ export class Arena {
     this.ring.material.color.set(ok ? (c.type === 'spell' ? 0xffe060 : 0xffffff) : 0xff3030);
     if (this.ghost) {
       this.ghost.root.visible = true;
-      this.ghost.root.position.set(p.x, c.air ? 1.4 : 0, p.z);
+      this.ghost.root.position.set(p.x, c.air ? (c.airHeight || 1.4) : 0, p.z);
     }
   }
 
@@ -561,6 +661,7 @@ export class Arena {
     const m = createMobModel(c.mob);
     m.root.scale.setScalar(c.scale * MODEL_SCALE);
     m.root.rotation.y = team === 0 ? Math.PI : 0;
+    m.root.traverse((o) => { if (o.isMesh) o.castShadow = true; });
     this.scene.add(m.root);
     const disc = new THREE.Mesh(new THREE.CircleGeometry(c.radius * 1.1, 20), new THREE.MeshBasicMaterial({ color: TEAM_COL[team], transparent: true, opacity: 0.5, depthWrite: false }));
     disc.rotation.x = -Math.PI / 2; disc.renderOrder = 3;
@@ -628,6 +729,13 @@ export class Arena {
     const tip = new THREE.Mesh(this.particleGeo, this.colMat(0xb0b0b8)); tip.scale.set(0.09, 0.09, 0.12); tip.position.z = 0.32; g.add(tip);
     const fl = new THREE.Mesh(this.particleGeo, this.colMat(0xf0f0f0)); fl.scale.set(0.12, 0.02, 0.14); fl.position.z = -0.26; g.add(fl);
     return g;
+  }
+
+  glowMat(rgb) {
+    const k = rgb.join(',');
+    let m = this.glowMats.get(k);
+    if (!m) { m = new THREE.MeshBasicMaterial({ color: new THREE.Color(rgb[0], rgb[1], rgb[2]) }); this.glowMats.set(k, m); }
+    return m;
   }
 
   colMat(c) {
@@ -745,8 +853,9 @@ export class Arena {
     if (u.deploy > 0) {
       u.deploy -= dt;
       const f = 1 - Math.max(0, u.deploy);
-      u.y = (u.air ? 1.4 : 0) + Math.max(0, (1 - f * 2.2)) * 3;
-      if (u.deploy <= 0) { u.y = u.air ? 1.4 : 0; this.burst(u.x, 0.1, u.z, [0xdddddd, 0xffffff], 6, 1.2, 0.12); }
+      const ah = u.card.airHeight || 1.4;
+      u.y = (u.air ? ah : 0) + Math.max(0, (1 - f * 2.2)) * 3;
+      if (u.deploy <= 0) { u.y = u.air ? ah : 0; this.burst(u.x, 0.1, u.z, [0xdddddd, 0xffffff], 6, 1.2, 0.12); }
       return;
     }
     u.walk = 0;
@@ -768,22 +877,27 @@ export class Arena {
         }
       } else this.moveToward(u, t.x, t.z, dt);
     }
-    if (u.air) u.y = 1.4 + Math.sin(u.t * 3) * 0.12;
+    if (u.air) u.y = (u.card.airHeight || 1.4) + Math.sin(u.t * 3) * 0.12;
   }
 
   hitSound() { const n = performance.now(); if (n - (this._hs || 0) > 90) { this._hs = n; sfx.hit(); } }
 
   shoot(src, t) {
-    const pumpkin = src.card ? src.card.ranged === 'pumpkin' : false;
+    const kind = src.card ? src.card.ranged : 'arrow';
+    const pumpkin = kind === 'pumpkin' || kind === 'orb';
     let m;
-    if (pumpkin) {
+    if (kind === 'orb') {
+      m = new THREE.Group();
+      const core = new THREE.Mesh(this.particleGeo, this.glowMat([2.6, 0.9, 3.8])); core.scale.setScalar(0.32); m.add(core);
+      const shell = new THREE.Mesh(this.particleGeo, this.glowMat([0.5, 0.15, 0.8])); shell.scale.setScalar(0.46); shell.rotation.set(0.7, 0.7, 0); m.add(shell);
+    } else if (pumpkin) {
       const b = new BlockBuilder(); b.box(-0.2, -0.2, -0.2, 0.2, 0.2, 0.2, TILES.pumpkin); m = b.mesh(this.blockMat);
     } else m = this.arrowMesh();
     const y0 = src.kind === 'tower' ? src.h + 0.9 : src.y + (src.height || 1) * 0.7;
     m.position.set(src.x, y0, src.z);
     this.scene.add(m);
     const dmg = src.kind === 'tower' ? src.dmg : src.card.dmg;
-    this.projectiles.push({ m, team: src.team, target: t, dmg, speed: pumpkin ? 9 : 16, splash: src.card ? src.card.splash : 0, arc: pumpkin, y0, sx: src.x, sz: src.z, p: 0 });
+    this.projectiles.push({ m, team: src.team, target: t, dmg, speed: kind === 'orb' ? 7 : pumpkin ? 9 : 16, orb: kind === 'orb', splash: src.card ? src.card.splash : 0, arc: pumpkin, y0, sx: src.x, sz: src.z, p: 0 });
     const n = performance.now(); if (n - (this._bs || 0) > 120) { this._bs = n; sfx.bow(); }
   }
 
@@ -804,7 +918,8 @@ export class Arena {
         this.projectiles.splice(i, 1);
         if (p.splash) {
           this.areaDamage(p.team, tx, tz, p.splash, p.dmg, 1);
-          this.burst(tx, ty, tz, [0xe08a20, 0xf0b040, 0x5a8a2a], 10, 2, 0.14);
+          if (p.orb) { this.burst(tx, ty, tz, [0x9a3ae0, 0xd080ff, 0x2a1040], 18, 3, 0.16); this.shake = Math.max(this.shake, 0.15); sfx.boom(); }
+          else this.burst(tx, ty, tz, [0xe08a20, 0xf0b040, 0x5a8a2a], 10, 2, 0.14);
         } else if (t.alive) this.damage(t, p.dmg);
       }
     }
@@ -989,13 +1104,28 @@ export class Arena {
       } else m.inner.position.z = 0;
       if (e.flash > 0) e.flash -= dt;
       const fl = e.flash > 0;
-      for (const mat of m.mats) mat.emissive.setRGB(fl ? 0.7 : 0, 0, 0);
+      for (const mat of m.mats) if (mat.emissive) mat.emissive.setRGB(fl ? 0.7 : 0, 0, 0);
       e.disc.position.set(e.x, 0.04, e.z);
       e.disc.visible = e.deploy <= 0;
       m.root.scale.setScalar(e.card.scale * MODEL_SCALE * (e.deploy > 0 ? 0.6 + 0.4 * (1 - e.deploy) : 1));
     }
-    for (const e of this.ents) if (e.kind === 'tower' && e.alive) for (const mat of e.guard.mats) mat.emissive.setRGB(e.flash > 0 ? 0.6 : 0, 0, 0);
-    if (this.waterMesh) this.waterMesh.position.y = Math.sin(this.clock * 1.6) * 0.04;
+    for (const e of this.ents) if (e.kind === 'tower' && e.alive) {
+      for (const mat of e.guard.mats) if (mat.emissive) mat.emissive.setRGB(e.flash > 0 ? 0.6 : 0, 0, 0);
+      for (const l of e.lanterns) l.scale.y = 0.36 * (0.92 + Math.sin(this.clock * 7 + l.position.x * 3) * 0.08);
+    }
+    if (this.fx) {
+      this.waterMat.uniforms.uTime.value = this.clock;
+      this.waterMat.uniforms.uCam.value.copy(this.camera.position);
+    } else if (this.waterMesh) this.waterMesh.position.y = Math.sin(this.clock * 1.6) * 0.04;
+    if (this.motes) {
+      const a = this.motes.geometry.attributes.position;
+      for (let i = 0; i < a.count; i++) {
+        a.setY(i, a.getY(i) + Math.sin(this.clock * 0.9 + i) * dt * 0.25);
+        a.setX(i, a.getX(i) + Math.cos(this.clock * 0.5 + i * 1.7) * dt * 0.3);
+      }
+      a.needsUpdate = true;
+      this.motes.material.opacity = 0.6 + Math.sin(this.clock * 2) * 0.25;
+    }
     // camera shake
     this.camera.position.copy(this.camBase);
     if (this.shake > 0) {
@@ -1003,12 +1133,17 @@ export class Arena {
       const s = this.shake * 0.5;
       this.camera.position.x += (Math.random() - 0.5) * s; this.camera.position.y += (Math.random() - 0.5) * s;
     }
-    const r = this.rect;
-    const H = this.canvas.clientHeight;
-    this.renderer.setViewport(r.x, H - r.y - r.h, r.w, r.h);
-    this.renderer.setScissor(r.x, H - r.y - r.h, r.w, r.h);
-    this.renderer.setScissorTest(true);
-    this.renderer.render(this.scene, this.camera);
+    if (this.sky) this.sky.position.copy(this.camera.position);
+    if (this.post && this.post.ok) {
+      this.post.begin();
+      this.renderer.render(this.scene, this.camera);
+      const sp = this.camera.position.clone().addScaledVector(SUN_DIR, 150).project(this.camera);
+      const on = Math.abs(sp.x) < 1.3 && Math.abs(sp.y) < 1.3 && sp.z < 1;
+      this.post.end({ sun: new THREE.Vector2((sp.x + 1) / 2, (sp.y + 1) / 2), sunVis: on ? 0.8 : 0, bloom: 0.55, rays: 0.55, exposure: 0.95, sat: 1.15, tint: new THREE.Color(1, 0.85, 0.62) });
+    } else {
+      this.renderer.setRenderTarget(null);
+      this.renderer.render(this.scene, this.camera);
+    }
     this.updateBars();
     this.updateHUD();
   }
@@ -1042,10 +1177,11 @@ export class Arena {
   resize() {
     const W = window.innerWidth, H = window.innerHeight;
     this.renderer.setSize(W, H);
+    if (this.post) this.post.setSize(W, H);
+    this.camera.clearViewOffset();
     const pr = $('ar-panel').getBoundingClientRect();
     const landscape = W > H;
     const r = landscape ? { x: 0, y: 0, w: Math.max(100, W - pr.width), h: H } : { x: 0, y: 0, w: W, h: Math.max(100, H - pr.height) };
-    this.rect = r;
     this.camera.aspect = r.w / r.h;
     // fit the whole arena (including towers) into the view
     const pitch = landscape ? 0.85 : 0.85;
@@ -1071,7 +1207,11 @@ export class Arena {
     if (!best) best = { D: 40, tc: 0 };
     this.camera.position.set(0, 0, best.tc).addScaledVector(dir, best.D * 1.01);
     this.camera.lookAt(0, 0, best.tc);
+    // render the full screen, but keep the fitted arena centred in the free area above/left of the card panel
+    this.camera.setViewOffset(r.w, r.h, -r.x, -r.y, W, H);
     this.camera.updateProjectionMatrix();
+    this.camera.updateMatrixWorld();
+    this.rect = { x: 0, y: 0, w: W, h: H };
     this.camBase = this.camera.position.clone();
   }
 
@@ -1106,6 +1246,7 @@ export class Arena {
     this.hud.classList.add('hidden');
     this.scene.traverse((o) => { if (o.geometry) o.geometry.dispose(); });
     this.atlasTex.dispose();
+    if (this.post) { for (const t of [this.post.main, this.post.bloomA, this.post.bloomB, this.post.rayA, this.post.rayB]) t.dispose(); }
     this.renderer.dispose();
     try { this.renderer.forceContextLoss(); } catch (e) { /* ignore */ }
     this.canvas.remove();
@@ -1114,5 +1255,5 @@ export class Arena {
 
 export function cardHTML(k, portraits, extra = '') {
   const c = CARDS[k];
-  return `<div class="ar-cbg ${c.type === 'spell' ? 'spell' : c.cost >= 5 ? 'epic' : c.cost >= 4 ? 'rare' : ''}"></div><img src="${portraits[k]}" draggable="false"><div class="need"></div><span class="cost">${c.cost}</span><span class="nm">${c.name}</span>${extra}`;
+  return `<div class="ar-cbg ${c.legendary ? 'legend' : c.type === 'spell' ? 'spell' : c.cost >= 5 ? 'epic' : c.cost >= 4 ? 'rare' : ''}"></div><img src="${portraits[k]}" draggable="false"><div class="need"></div><span class="cost">${c.cost}</span><span class="nm">${c.name}</span>${extra}`;
 }

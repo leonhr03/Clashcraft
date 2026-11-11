@@ -343,6 +343,55 @@ MOB_DEFS.villager = {
   },
 };
 
+// Arena boss: "Schattenfürst" – a floating obsidian sorcerer-king (original design).
+function glowBox(parent, size, pos, color) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(size[0] / 16, size[1] / 16, size[2] / 16), new THREE.MeshBasicMaterial({ color: new THREE.Color(color[0], color[1], color[2]) }));
+  m.position.set(pos[0] / 16, pos[1] / 16, pos[2] / 16);
+  m.userData.glow = true;
+  parent.add(m);
+  return m;
+}
+MOB_DEFS.shadow_lord = {
+  name: 'Schattenfürst', w: 1.2, h: 2.6, hp: 300, speed: 0.8, hostile: true, damage: 8,
+  drops: [],
+  build(root) {
+    const OBS = hex('#1e1626'), OBS2 = hex('#33264a'), VEIN = hex('#8a3ad8'), GOLD = hex('#e0b030'), GOLD2 = hex('#a07818');
+    const stone = { all: (f) => { f.fill(OBS, 0.12); f.dither(OBS2, 0.18); f.spots(VEIN, 2, 1); } };
+    // tapering ghostly tail instead of legs
+    part(root, 'sl_tail3', [4, 5, 3], [0, 3, -1], [0, 0, 0], stone);
+    part(root, 'sl_tail2', [6, 6, 4], [0, 8, -0.5], [0, 0, 0], stone);
+    part(root, 'sl_tail1', [9, 6, 5], [0, 13, 0], [0, 0, 0], stone);
+    const body = part(root, 'sl_body', [13, 10, 7], [0, 21, 0], [0, 0, 0], {
+      all: stone.all,
+      front: (f) => { f.fill(OBS, 0.1); f.dither(OBS2, 0.2); f.rect(0, 0, 13, 2, GOLD, 0.06); f.rect(5, 2, 3, 3, GOLD2, 0.05); f.px(6, 3, VEIN); f.rect(2, 6, 9, 1, OBS2); },
+    });
+    const cape = part(root, 'sl_cape', [14, 18, 1], [0, 25, -4], [0, -9, 0], { all: (f) => { f.fill(hex('#4a1030'), 0.08); f.rect(0, 0, f.w, 2, GOLD, 0.05); for (let x = 1; x < f.w; x += 3) f.px(x, f.h - 1, hex('#2a0818')); } });
+    const head = part(root, 'sl_head', [9, 9, 9], [0, 26, 0], [0, 4.5, 0], {
+      all: (f) => { f.fill(OBS, 0.1); f.dither(OBS2, 0.15); },
+      front: (f) => { f.fill(OBS, 0.08); f.rect(0, 2, 9, 1, OBS2); f.rect(3, 7, 3, 1, hex('#5a2a8a')); },
+    });
+    glowBox(head, [2, 1.2, 0.4], [-2, 4.5, 4.6], [2.4, 0.7, 3.6]);
+    glowBox(head, [2, 1.2, 0.4], [2, 4.5, 4.6], [2.4, 0.7, 3.6]);
+    // crown with tall spikes
+    part(head, 'sl_crown', [11, 2, 11], [0, 9.5, 0], [0, 0, 0], { all: (f) => { f.fill(GOLD, 0.08); f.dither(GOLD2, 0.2); } });
+    for (const [x, z, hgt] of [[-4, 4, 4], [4, 4, 4], [0, 4, 6], [-4, -4, 3], [4, -4, 3]]) part(head, 'sl_spike' + hgt, [2, hgt, 2], [x, 10.5 + hgt / 2, z], [0, 0, 0], { all: (f) => f.fill(GOLD, 0.06) });
+    glowBox(head, [1.6, 1.6, 1.6], [0, 15, 4], [3.2, 1.0, 1.6]);
+    const armSkin = { all: (f) => { f.fill(OBS, 0.1); f.dither(OBS2, 0.2); f.rect(0, 0, f.w, 3, GOLD, 0.06); f.rect(0, f.h - 2, f.w, 2, VEIN, 0.05); } };
+    const arms = [-1, 1].map((sd) => part(root, 'sl_arm', [4, 13, 4], [sd * 8.5, 24, 0], [0, -5, 0], armSkin));
+    arms.forEach((a) => glowBox(a, [3, 3, 3], [0, -13, 1], [1.8, 0.5, 3.0]));
+    // orbiting soul crystals
+    const orbit = new THREE.Group();
+    orbit.position.y = 18 / 16;
+    root.add(orbit);
+    for (let i = 0; i < 3; i++) {
+      const a = (i / 3) * Math.PI * 2;
+      const c = glowBox(orbit, [3, 4, 3], [Math.cos(a) * 14, 0, Math.sin(a) * 14], [1.4, 0.6, 2.8]);
+      c.rotation.set(0.6, a, 0.6);
+    }
+    return { head, body, arms, cape, orbit, boss: true };
+  },
+};
+
 export function createMobModel(type) {
   const root = new THREE.Group();
   const inner = new THREE.Group();
@@ -351,7 +400,7 @@ export function createMobModel(type) {
   // per-instance materials so we can tint (damage flash, light)
   const mats = [];
   inner.traverse((o) => {
-    if (o.isMesh) { o.material = o.material.clone(); mats.push(o.material); }
+    if (o.isMesh && !o.userData.glow) { o.material = o.material.clone(); mats.push(o.material); }
   });
   return { root, inner, parts, mats };
 }
@@ -359,6 +408,14 @@ export function createMobModel(type) {
 export function animateMob(model, t, walkAmt, headYaw, headPitch) {
   const p = model.parts;
   const swing = Math.sin(t * 8) * 0.7 * walkAmt;
+  if (p.boss) {
+    p.arms[0].rotation.x = -0.5 + Math.sin(t * 1.6) * 0.18; p.arms[1].rotation.x = -0.5 + Math.sin(t * 1.6 + 1.5) * 0.18;
+    p.arms[0].rotation.z = -0.15; p.arms[1].rotation.z = 0.15;
+    p.cape.rotation.x = 0.18 + Math.sin(t * 2.3) * 0.08;
+    p.orbit.rotation.y = t * 1.8;
+    p.head.rotation.y = headYaw || 0; p.head.rotation.x = headPitch || 0;
+    return;
+  }
   if (p.spider) {
     p.legs.forEach((l, i) => { l.rotation.y = l.userData.baseY + Math.sin(t * 12 + i * 1.3) * 0.3 * walkAmt; });
   } else if (p.legs) {

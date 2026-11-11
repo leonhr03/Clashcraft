@@ -175,6 +175,9 @@ input { font: 16px var(--ui-font); padding: 8px; background: #000; color: #fff; 
 .ar-card .ar-cbg { position: absolute; inset: 0; background: linear-gradient(#9ab8d8, #52708e); }
 .ar-card .ar-cbg.rare { background: linear-gradient(#f0c070, #b07020); }
 .ar-card .ar-cbg.epic { background: linear-gradient(#d090f0, #7a3aa8); }
+.ar-card .ar-cbg.legend { background: linear-gradient(135deg, #ffe680, #c060ff 55%, #3a1a6a); }
+.ar-card .ar-cbg.legend::after { content: ""; position: absolute; inset: 0; background: linear-gradient(120deg, transparent 30%, rgba(255,255,255,0.45) 50%, transparent 70%); background-size: 250% 100%; animation: shine 2.5s infinite; }
+@keyframes shine { from { background-position: 150% 0; } to { background-position: -100% 0; } }
 .ar-card .ar-cbg.spell { background: linear-gradient(#f09a7a, #a8402a); }
 .ar-card img { position: absolute; inset: 4% 4% 18% 4%; width: 92%; height: 78%; object-fit: contain; pointer-events: none; -webkit-user-drag: none; }
 .ar-card .nm { position: absolute; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); font-size: clamp(8px, 2.4vw, 12px); text-align: center; padding: 2px 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #fff; }
