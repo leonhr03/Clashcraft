@@ -1,62 +1,128 @@
-# ClashCraft
+<div align="center">
 
-**APK herunterladen:** [`apk/ClashCraft.apk`](apk/ClashCraft.apk) (wird bei jedem Push automatisch neu gebaut) –
-oder unter **Releases** die neueste `ClashCraft.apk`.
+# ⚔️ ClashCraft
 
-ClashCraft enthält die **Block-Arena** (3D-Kartenkampf mit Mobs als Karten) und die Sandbox **Blockwelt**.
+**Ein 3D-Kartenkampf in einer Blockwelt – plus ein komplettes Voxel-Sandbox-Spiel. Für Android.**
 
-Ein eigenes 3D-Voxel-Sandbox-Spiel (Abbauen, Bauen, Craften, Überleben) für Android-Handys.
-Alle Texturen, Mobs und Sounds werden prozedural im Code erzeugt – es werden keine fremden Assets verwendet.
+[![APK herunterladen](https://img.shields.io/badge/APK-herunterladen-3d7bff?style=for-the-badge&logo=android&logoColor=white)](apk/ClashCraft.apk)
+[![Build](https://img.shields.io/github/actions/workflow/status/leonhr03/clashcraft/android.yml?style=for-the-badge&label=Build)](../../actions)
 
-## Features
-- Unendliche, zufällig generierte Welt mit Seed: Ebenen, Wälder, Birkenwälder, Taiga, Wüsten, Schneetundra, Berge, Sümpfe, Ozeane, Strände
-- Höhlen, Erze (Kohle, Kupfer, Eisen, Gold, Lapislazuli, Diamant), Lava, Granit/Diorit/Andesit
-- 85 Blöcke und über 100 Items: Werkzeuge in 5 Stufen, Rüstungen in 4 Stufen, Bogen & Pfeile, Eimer, Schere, Essen, Farbstoffe …
-- Crafting (2×2 im Inventar, 3×3 an der Werkbank), Ofen zum Schmelzen/Braten, Truhen, Bett (Schlafen + Spawnpunkt)
-- Überleben: Herzen, Hunger, Sauerstoff unter Wasser, Fallschaden, Lava, Rüstungsschutz, Tod & Wiederbeleben
-- Kreativmodus: alle Items, Fliegen (Springen doppelt tippen), sofortiges Abbauen
-- Tiere: Schwein, Kuh, Schaf (scherbar), Huhn – Monster: Zombie, Skelett (schießt Pfeile), Spinne
-- Tag-/Nacht-Zyklus mit Sonne, Mond, Sternen, Wolken; Licht von Fackeln, Laternen, Lava (weiche Beleuchtung + Umgebungsverdeckung)
-- Ackerbau (Hacke, Weizen, Knochenmehl), wachsende Setzlinge, Zuckerrohr, Kakteen
-- Wasser- und Lavafluss, fallender Sand/Kies
-- Dschungel-Biom mit hohen Tropenbäumen und Büschen
-- Bauwerke (eigene Designs): Dörfer mit Häusern, Feldern, Schmiede, Brunnen und Dorfbewohnern (Ebene, Wüste, Taiga),
-  Wüstentempel mit verstecktem Schatzraum, Dschungeltempel mit Keller, Untergrundfestung mit Bibliothek, Brunnenraum und Portalraum
-- Unterwelt (Glutportal: 8 Obsidian + Leuchtkristall): Glutgestein, Aschesand, Lavameere, Glutquarz, Glutfestungen mit Brücken und Türmen
-- Leere (Portal in der Untergrundfestung): schwebende Inseln, Rückkehrportal, Sternenstädte mit wertvoller Beute
-- Entdeckerkompass (Eisen + Lapis): zeigt Entfernung und Richtung zu den nächsten Bauwerken
-- Speichern mehrerer Welten (automatisch)
-- Touch-Steuerung: Joystick links, Umsehen rechts wischen, Tippen = Benutzen/Platzieren/Angreifen, Halten = Abbauen
+![Block-Arena im Querformat](docs/arena.png)
 
-## Block-Arena (Kartenkampf)
-Neuer Spielmodus im Hauptmenü: **⚔ Block-Arena**. Ein 3D-Echtzeit-Kartenspiel auf einem Spielfeld aus Blöcken –
-die Mobs aus Blockwelt sind die Karten.
-- Zwei Bahnen mit Brücken über einen Fluss, je Seite zwei Wachtürme (Skelett-Schütze) und ein Königsturm (Dorfkönig)
-- Energie (max. 10) lädt sich auf; in der letzten Minute doppelt so schnell. 3 Minuten + Verlängerung (nächster Turm entscheidet)
-- 13 Karten: Zombie, Skelett-Schützen, Spinne, Aschezombie, Glutskelett, Leerenkrabbler, Kuh-Koloss, Schweinebande,
-  Hühnerschwarm (fliegt), Wollschaf, Kürbiswerfer, Zauber Pulverfass und Pfeilhagel –
-  und die legendäre Boss-Karte **Schattenfürst** (7 Energie): ein schwebender Obsidian-König mit Krone,
-  der explodierende Seelenkugeln schleudert
-- Shader-Look (an/aus über die Grafik-Einstellungen): weiche Sonnenschatten, Abendsonnen-Licht, Himmel mit Sonne,
-  animiertes Wasser mit Spiegelung und Gischt, Bloom/Leuchten, Lichtstrahlen, Laternen und schwebende Lichtfunken
-- Eigenes 8er-Deck zusammenstellen, Computergegner in 3 Stufen, Pokale für Siege
-- Karte aufs Feld ziehen (oder antippen und dann aufs Feld tippen). Nach Zerstörung eines Gegnerturms darfst du weiter vorne ausspielen.
-- Alles nutzt die eigenen, prozedural erzeugten Blockwelt-Texturen und -Modelle (keine fremden Assets).
+</div>
 
-## APK installieren
-Bei jedem Push baut GitHub Actions automatisch die APK (`.github/workflows/android.yml`).
-Unter **Releases** die neueste `Blockwelt.apk` auf dem Handy herunterladen und installieren
-(einmalig "Apps aus unbekannten Quellen installieren" erlauben).
+---
 
-## Selbst bauen
+## 📲 Installieren
+
+1. Auf dem Handy **[`apk/ClashCraft.apk`](apk/ClashCraft.apk)** öffnen → **„Download raw file“**
+   (oder unter **Releases** die neueste `ClashCraft.apk` laden).
+2. Datei öffnen und installieren. Beim ersten Mal „Apps aus unbekannten Quellen installieren“ erlauben.
+3. Im Hauptmenü **⚔ Block-Arena** antippen – los geht's!
+
+> Benötigt Android 8 oder neuer. Die APK wird bei jedem Push automatisch von GitHub Actions neu gebaut.
+
+---
+
+## ⚔️ Block-Arena – der Kartenkampf
+
+Zwei Spieler, zwei Bahnen, ein Fluss mit Brücken – und auf jeder Seite drei Türme.
+Spiele Mob-Karten aus, verteidige deine Türme und zerstöre die des Gegners!
+
+<table>
+<tr>
+<td width="33%"><img src="docs/arena-hochformat.png" alt="Arena im Hochformat"></td>
+<td width="33%"><img src="docs/deck.png" alt="Deck-Editor"></td>
+<td width="33%"><img src="docs/sieg.png" alt="Sieg-Bildschirm"></td>
+</tr>
+<tr>
+<td align="center">Kampf im Hochformat</td>
+<td align="center">Deck-Editor</td>
+<td align="center">Sieg!</td>
+</tr>
+</table>
+
+### So wird gespielt
+- **Energie** 🟣 lädt sich langsam auf (max. 10). Jede Karte kostet Energie.
+- **Karte aufs Feld ziehen** – oder Karte antippen und dann aufs Feld tippen. Rote Bereiche sind gesperrt.
+- Mobs laufen selbstständig über die Brücken und greifen an, was ihnen in den Weg kommt.
+- Jeder zerstörte Wachturm bringt eine **Krone** 👑 – und du darfst auf dieser Seite weiter vorne ausspielen.
+- Fällt der **Königsturm**, ist das Spiel sofort gewonnen (3 Kronen).
+- Ein Match dauert **3 Minuten**, in der letzten Minute gibt es **2× Energie**.
+  Bei Gleichstand folgt eine **Verlängerung**: Der nächste Turm entscheidet.
+- Siege bringen **🏆 Pokale**, der Computergegner hat 3 Stufen (Leicht / Normal / Schwer).
+
+### Die Karten
+
+| Karte | ⚡ | Beschreibung |
+|---|:-:|---|
+| 🐔 Hühnerschwarm | 2 | Vier fliegende Hühner – Nahkämpfer erreichen sie nicht |
+| 🐷 Schweinebande | 2 | Drei Schweine, die gemeinsam drauflos rennen |
+| 🐑 Wollschaf | 2 | Billiger, flauschiger Schutzschild |
+| 🧟 Zombie | 3 | Robuster Nahkämpfer |
+| 💀 Skelett-Schützen | 3 | Zwei Bogenschützen, treffen auch Flieger |
+| 🕷️ Spinne | 3 | Sehr schnell und bissig |
+| 🏹 Pfeilhagel | 3 | Zauber: Pfeilregen auf ein großes Gebiet |
+| 🔥 Aschezombie | 4 | Zäher Brocken aus der Unterwelt |
+| 🟣 Leerenkrabbler | 4 | Rennt direkt zu den Türmen |
+| 🎃 Kürbiswerfer | 4 | Dorfbewohner, der Kürbisse mit Flächenschaden wirft |
+| 🛢️ Pulverfass | 4 | Zauber: große Explosion im Zielgebiet |
+| ⚔️ Glutskelett | 5 | Langsame, aber vernichtende Klingenhiebe |
+| 🐄 Kuh-Koloss | 5 | Riesiger Panzer, greift nur Gebäude an |
+| 👑 **Schattenfürst** | 7 | **Legendär!** Schwebender Obsidian-König, schleudert explodierende Seelenkugeln |
+
+### Grafik
+Mit eingeschalteten Shadern (Einstellungen → *Shader* / *Shader-Effekte*):
+weiche Sonnenschatten, Abendsonnen-Licht, Himmel mit Sonne, animiertes Wasser mit Spiegelung und Gischt,
+Leuchten (Bloom), Lichtstrahlen, Laternen auf den Türmen und schwebende Lichtfunken.
+Auf schwächeren Handys einfach die Shader ausschalten.
+
+---
+
+## 🧱 Blockwelt – die Sandbox
+
+<img src="docs/menu.png" alt="Hauptmenü" width="520">
+
+Unter **Spielen** steckt ein komplettes Voxel-Sandbox-Spiel (Abbauen, Bauen, Craften, Überleben):
+
+- Unendliche, zufällige Welt: Ebenen, Wälder, Taiga, Wüsten, Schnee, Berge, Sümpfe, Dschungel, Ozeane
+- Höhlen, Erze, 85 Blöcke und über 100 Items, Werkzeuge & Rüstungen in mehreren Stufen
+- Crafting, Ofen, Truhen, Bett, Ackerbau, Wasser- und Lavafluss
+- Überlebens- und Kreativmodus, Tag-/Nacht-Zyklus
+- Tiere, Monster und Dorfbewohner
+- Dörfer, Tempel, Untergrundfestung, **Unterwelt** und **Leere** mit eigenen Bauwerken
+- Mehrere Welten, automatisches Speichern, Touch-Steuerung
+
+---
+
+## 🛠️ Selbst bauen
+
 ```bash
 npm install
 npm run build            # erzeugt android/app/src/main/assets/www/game.js
 cd android && ./gradlew assembleRelease
 # -> android/app/build/outputs/apk/release/app-release.apk
 ```
-Zum Testen im Browser: `android/app/src/main/assets/www/` mit einem lokalen Webserver öffnen.
 
-## Steuerung am PC (Browser)
-WASD laufen · Maus umsehen · Linksklick abbauen/angreifen · Rechtsklick platzieren/benutzen ·
-Leertaste springen (2× = fliegen im Kreativmodus) · Shift schleichen · Strg sprinten · E Inventar · Q fallen lassen · 1–9 Hotbar · F3 Debug
+Zum Testen im Browser: `android/app/src/main/assets/www/` mit einem lokalen Webserver öffnen
+(z. B. `python3 -m http.server`) und `index.html` aufrufen.
+
+**Steuerung am PC:** Block-Arena mit der Maus (Karten ziehen oder anklicken).
+Sandbox: WASD laufen · Maus umsehen · Linksklick abbauen · Rechtsklick platzieren · Leertaste springen · E Inventar · 1–9 Hotbar.
+
+### Projektaufbau
+| Datei | Inhalt |
+|---|---|
+| `src/arena.js` | Block-Arena: Spielfeld, Einheiten, Türme, Computergegner, Shader |
+| `src/cards.js` | Alle Karten mit ihren Werten, Deck & Pokale |
+| `src/models.js` | Mob-Modelle (inkl. Schattenfürst) |
+| `src/textures.js` | Prozedural gemalte Pixel-Texturen |
+| `src/game.js`, `src/world*.js` … | Sandbox-Spiel |
+| `.github/workflows/android.yml` | Baut die APK und legt sie unter `apk/` + Releases ab |
+
+---
+
+## 📜 Hinweis
+
+ClashCraft ist ein eigenes Fan-Projekt. **Alle Texturen, Modelle und Sounds werden im Code selbst erzeugt** –
+es werden keine Grafiken, Sounds oder Figuren aus anderen Spielen verwendet.
