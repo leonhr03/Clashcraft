@@ -660,6 +660,7 @@ export function tileIndex(name) {
 }
 
 export function buildAtlas() {
+  if (atlasCanvas) return atlasCanvas; // tiles are only painted once (shared by world + arena)
   const canvas = document.createElement('canvas');
   canvas.width = RES * ATLAS_COLS; canvas.height = RES * ATLAS_COLS;
   const ctx = canvas.getContext('2d');

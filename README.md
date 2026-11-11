@@ -23,6 +23,17 @@ Alle Texturen, Mobs und Sounds werden prozedural im Code erzeugt – es werden k
 - Speichern mehrerer Welten (automatisch)
 - Touch-Steuerung: Joystick links, Umsehen rechts wischen, Tippen = Benutzen/Platzieren/Angreifen, Halten = Abbauen
 
+## Block-Arena (Kartenkampf)
+Neuer Spielmodus im Hauptmenü: **⚔ Block-Arena**. Ein 3D-Echtzeit-Kartenspiel auf einem Spielfeld aus Blöcken –
+die Mobs aus Blockwelt sind die Karten.
+- Zwei Bahnen mit Brücken über einen Fluss, je Seite zwei Wachtürme (Skelett-Schütze) und ein Königsturm (Dorfkönig)
+- Energie (max. 10) lädt sich auf; in der letzten Minute doppelt so schnell. 3 Minuten + Verlängerung (nächster Turm entscheidet)
+- 13 Karten: Zombie, Skelett-Schützen, Spinne, Aschezombie, Glutskelett, Leerenkrabbler, Kuh-Koloss, Schweinebande,
+  Hühnerschwarm (fliegt), Wollschaf, Kürbiswerfer, Zauber Pulverfass und Pfeilhagel
+- Eigenes 8er-Deck zusammenstellen, Computergegner in 3 Stufen, Pokale für Siege
+- Karte aufs Feld ziehen (oder antippen und dann aufs Feld tippen). Nach Zerstörung eines Gegnerturms darfst du weiter vorne ausspielen.
+- Alles nutzt die eigenen, prozedural erzeugten Blockwelt-Texturen und -Modelle (keine fremden Assets).
+
 ## APK installieren
 Bei jedem Push baut GitHub Actions automatisch die APK (`.github/workflows/android.yml`).
 Unter **Releases** die neueste `Blockwelt.apk` auf dem Handy herunterladen und installieren

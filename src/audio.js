@@ -65,5 +65,8 @@ export const sfx = {
     else if (type === 'skeleton') { burst(2500, 0.1, 0.3, 4); setTimeout(() => burst(2200, 0.1, 0.3, 4), 90); }
     else if (type === 'spider') { burst(3500, 0.25, 0.2, 6); }
   },
+  boom() { burst(140, 0.7, 0.9, 0.7, 'lowpass'); tone(70, 0.5, 0.5, 'sine', -40); },
+  win() { [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => tone(f, 0.25, 0.25, 'triangle'), i * 140)); },
+  lose() { [392, 330, 262, 196].forEach((f, i) => setTimeout(() => tone(f, 0.3, 0.25, 'triangle'), i * 180)); },
   click() { tone(900, 0.04, 0.15, 'square'); },
 };

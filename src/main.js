@@ -3,7 +3,9 @@ import { UI } from './ui.js';
 import { Game } from './game.js';
 import { listWorlds, saveWorldMeta, loadChunks, deleteWorld, loadSettings, storeSettings } from './save.js';
 import { hashString } from './noise.js';
-import { initAudio, setVolume } from './audio.js';
+import { initAudio, setVolume, sfx } from './audio.js';
+import { Arena, getPortraits, cardHTML } from './arena.js';
+import { CARDS, CARD_KEYS, loadDeck, saveDeck, loadTrophies, saveTrophies } from './cards.js';
 
 const $ = (id) => document.getElementById(id);
 const DEFAULTS = {
@@ -17,12 +19,13 @@ let game = null;
 let settingsReturn = 'mainmenu';
 
 function show(id) {
-  for (const m of ['mainmenu', 'worldlist', 'createworld', 'settings']) $(m).classList.toggle('hidden', m !== id);
+  for (const m of ['mainmenu', 'worldlist', 'createworld', 'settings', 'arenamenu', 'deckmenu']) $(m).classList.toggle('hidden', m !== id);
 }
 
 const bind = (id, fn) => $(id).addEventListener('click', (e) => { initAudio(); fn(e); });
 
 bind('mm-play', () => { show('worldlist'); refreshWorlds(); });
+bind('mm-arena', () => openArenaMenu());
 bind('mm-settings', () => { settingsReturn = 'mainmenu'; openSettings(); });
 bind('wl-back', () => show('mainmenu'));
 bind('wl-new', () => { show('createworld'); $('cw-name').value = 'Neue Welt'; $('cw-seed').value = ''; });
@@ -145,11 +148,114 @@ function openSettings() {
   }
 }
 
+// ---------------- Block-Arena ----------------
+let arena = null;
+let deck = loadDeck();
+const DIFFS = ['Leicht', 'Normal', 'Schwer'];
+let difficulty = 1;
+try { difficulty = Math.min(2, Math.max(0, parseInt(localStorage.getItem('blockwelt_arena_diff'), 10))); if (isNaN(difficulty)) difficulty = 1; } catch (e) { difficulty = 1; }
+
+function openArenaMenu() {
+  show('arenamenu');
+  $('am-troph').textContent = loadTrophies();
+  $('am-diff').textContent = 'Gegner: ' + DIFFS[difficulty];
+  const p = getPortraits();
+  $('am-deckprev').innerHTML = deck.map((k) => `<div class="ar-card">${cardHTML(k, p)}</div>`).join('');
+}
+bind('am-back', () => show('mainmenu'));
+bind('am-diff', () => {
+  difficulty = (difficulty + 1) % 3;
+  try { localStorage.setItem('blockwelt_arena_diff', String(difficulty)); } catch (e) { /* ignore */ }
+  $('am-diff').textContent = 'Gegner: ' + DIFFS[difficulty];
+});
+bind('am-deck', () => openDeck());
+bind('am-fight', () => startArena());
+
+let deckDraft = [];
+function openDeck() {
+  show('deckmenu');
+  deckDraft = deck.slice();
+  renderDeck();
+}
+function renderDeck(focus) {
+  const p = getPortraits();
+  const grid = $('dk-grid');
+  grid.innerHTML = '';
+  const sorted = CARD_KEYS.slice().sort((a, b) => CARDS[a].cost - CARDS[b].cost);
+  for (const k of sorted) {
+    const el = document.createElement('div');
+    const inDeck = deckDraft.includes(k);
+    el.className = 'ar-card ' + (inDeck ? 'in' : 'out');
+    el.innerHTML = cardHTML(k, p);
+    el.addEventListener('click', () => {
+      sfx.click();
+      if (deckDraft.includes(k)) deckDraft = deckDraft.filter((q) => q !== k);
+      else if (deckDraft.length < 8) deckDraft.push(k);
+      else { $('dk-info').textContent = 'Dein Deck ist voll (8 Karten). Nimm zuerst eine Karte heraus.'; return; }
+      renderDeck(k);
+    });
+    grid.appendChild(el);
+  }
+  $('dk-count').textContent = deckDraft.length + '/8';
+  $('dk-avg').textContent = deckDraft.length ? (deckDraft.reduce((s, k) => s + CARDS[k].cost, 0) / deckDraft.length).toFixed(1) : '0';
+  const c = focus && CARDS[focus];
+  $('dk-info').textContent = c ? `${c.name} (${c.cost} Energie): ${c.desc}` : 'Tippe Karten an, um sie ins Deck zu legen oder herauszunehmen (genau 8).';
+}
+bind('dk-done', () => {
+  if (deckDraft.length !== 8) { $('dk-info').textContent = `Ein Deck braucht genau 8 Karten (aktuell ${deckDraft.length}).`; return; }
+  deck = deckDraft.slice();
+  saveDeck(deck);
+  openArenaMenu();
+});
+
+function startArena() {
+  show(null);
+  if (arena) { arena.dispose(); arena = null; }
+  $('ar-quit').classList.remove('confirm'); $('ar-quit').textContent = '✕';
+  try {
+    arena = new Arena($('arena'), { deck, difficulty, onEnd: arenaEnded });
+    window.__arena = arena;
+  } catch (e) {
+    console.error(e);
+    arena = null;
+    openArenaMenu();
+  }
+}
+function arenaEnded(res, crowns) {
+  let t = loadTrophies();
+  const delta = res === 'win' ? 30 : res === 'lose' ? -Math.min(20, t) : 0;
+  t += delta; saveTrophies(t);
+  const title = $('ar-endtitle');
+  title.className = res;
+  title.textContent = res === 'win' ? 'Sieg!' : res === 'lose' ? 'Niederlage' : 'Unentschieden';
+  $('ar-endcrowns').innerHTML = [0, 1, 2].map((i) => `<span class="crown ${i < crowns[0] ? 'on blue' : ''}">♛</span>`).join('') + '<span style="width:24px"></span>' + [0, 1, 2].map((i) => `<span class="crown ${i < crowns[1] ? 'on red' : ''}">♛</span>`).join('');
+  $('ar-endtroph').textContent = `🏆 ${delta >= 0 ? '+' : ''}${delta} → ${t} Pokale`;
+  $('ar-end').classList.remove('hidden');
+}
+function quitArena() {
+  if (arena) { arena.dispose(); arena = null; }
+  $('ar-end').classList.add('hidden');
+  openArenaMenu();
+}
+bind('ar-again', () => { $('ar-end').classList.add('hidden'); startArena(); });
+bind('ar-menu', () => quitArena());
+let quitTimer = 0;
+bind('ar-quit', () => {
+  const b = $('ar-quit');
+  if (b.classList.contains('confirm')) { clearTimeout(quitTimer); quitArena(); return; }
+  b.classList.add('confirm'); b.textContent = 'Aufgeben?';
+  quitTimer = setTimeout(() => { b.classList.remove('confirm'); b.textContent = '✕'; }, 3000);
+});
+
 // save when app goes to background
+document.addEventListener('visibilitychange', () => { if (arena) arena.setPaused(document.hidden); });
 document.addEventListener('visibilitychange', () => { if (document.hidden && game) { game.save(); if (!ui.paused && ui.isTouch) ui.pause(); } });
 window.addEventListener('pagehide', () => { if (game) game.save(); });
 // Android back button (sent by the wrapper)
 window.blockweltBack = () => {
+  if (arena) { $('ar-quit').click(); return true; }
+  if (!$('deckmenu').classList.contains('hidden')) { openArenaMenu(); return true; }
+  if (!$('arenamenu').classList.contains('hidden')) { show('mainmenu'); return true; }
   if (!game) { const cur = ['createworld', 'worldlist', 'settings'].find((m) => !$(m).classList.contains('hidden')); if (cur) { show('mainmenu'); return true; } return false; }
   if (ui.screenOpen) ui.closeScreen(); else if (ui.paused) ui.resume(); else ui.pause();
   return true;

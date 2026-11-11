@@ -9,6 +9,60 @@
 </head>
 <body>
 <div id="game"></div>
+<div id="arena"></div>
+
+<div id="arenahud" class="hidden">
+  <div id="ar-bars"></div>
+  <div id="ar-top">
+    <div class="ar-side"><span class="lbl red">Gegner</span><div id="ar-crowns-ai" class="crowns"></div></div>
+    <div class="ar-clock"><span id="ar-timelabel">Restzeit</span><b id="ar-time">3:00</b></div>
+    <div class="ar-side right"><span class="lbl blue">Du</span><div id="ar-crowns-me" class="crowns"></div></div>
+  </div>
+  <button id="ar-quit" class="tbtn small">✕</button>
+  <div id="ar-toast"></div>
+  <div id="ar-panel">
+    <div id="ar-nextwrap"><span>Nächste</span><div id="ar-next"></div></div>
+    <div id="ar-hand">
+      <div class="ar-card"></div><div class="ar-card"></div><div class="ar-card"></div><div class="ar-card"></div>
+    </div>
+    <div id="ar-energy"><div id="ar-efill"></div><div class="segs"></div><span class="drop"></span><b id="ar-enum">5</b></div>
+  </div>
+  <div id="ar-end" class="hidden">
+    <div class="ar-endbox">
+      <h1 id="ar-endtitle">Sieg!</h1>
+      <div id="ar-endcrowns" class="crowns big"></div>
+      <div id="ar-endtroph"></div>
+      <div class="btnrow">
+        <button class="btn" id="ar-again">Nochmal kämpfen</button>
+        <button class="btn" id="ar-menu">Zur Arena</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="arenamenu" class="menu hidden">
+  <div class="menubg"></div>
+  <div class="menuinner">
+    <h1 class="logo small">BLOCK-ARENA</h1>
+    <div class="trophies">🏆 <b id="am-troph">0</b> Pokale</div>
+    <div id="am-deckprev" class="deckprev"></div>
+    <button class="btn arena-btn" id="am-fight">⚔ Kampf starten</button>
+    <button class="btn toggle" id="am-diff">Gegner: Normal</button>
+    <button class="btn" id="am-deck">Deck bearbeiten</button>
+    <button class="btn" id="am-back">Zurück</button>
+    <div class="hint">Ziehe Karten aufs Spielfeld (oder Karte antippen, dann Feld antippen). Zerstöre die gegnerischen Türme!</div>
+  </div>
+</div>
+
+<div id="deckmenu" class="menu hidden">
+  <div class="menubg"></div>
+  <div class="menuinner wide">
+    <h2>Dein Deck <span id="dk-count">8/8</span> · Ø Energie <span id="dk-avg">3.0</span></h2>
+    <div id="dk-info" class="dk-info">Tippe Karten an, um sie ins Deck zu legen oder herauszunehmen (genau 8).</div>
+    <div id="dk-grid" class="dk-grid"></div>
+    <button class="btn" id="dk-done">Fertig</button>
+  </div>
+</div>
 
 <div id="hud" class="hidden">
   <div id="vignette"></div>
@@ -45,6 +99,7 @@
     <h1 class="logo">BLOCKWELT</h1>
     <div class="splash">Baue deine eigene Welt!</div>
     <button class="btn" id="mm-play">Spielen</button>
+    <button class="btn arena-btn" id="mm-arena">⚔ Block-Arena (Kartenkampf)</button>
     <button class="btn" id="mm-settings">Einstellungen</button>
     <div class="version">Version 1.0 · Eigenes Voxel-Sandbox-Spiel</div>
   </div>
