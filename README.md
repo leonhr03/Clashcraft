@@ -7,7 +7,7 @@
 [![APK herunterladen](https://img.shields.io/badge/APK-herunterladen-3d7bff?style=for-the-badge&logo=android&logoColor=white)](apk/ClashCraft.apk)
 [![Build](https://img.shields.io/github/actions/workflow/status/leonhr03/clashcraft/android.yml?style=for-the-badge&label=Build)](../../actions)
 
-![Block-Arena im Querformat](docs/arena.png)
+<img src="docs/startseite.png" width="260" alt="Startseite"> <img src="docs/startseite-glutfestung.png" width="260" alt="Glutfestung">
 
 </div>
 
@@ -54,6 +54,30 @@ Spiele Mob-Karten aus, verteidige deine Türme und zerstöre die des Gegners!
   Bei Gleichstand folgt eine **Verlängerung**: Der nächste Turm entscheidet.
 - Siege bringen **🏆 Pokale**, der Computergegner hat 3 Stufen (Leicht / Normal / Schwer).
 
+### Fortschritt – ein richtiges Spiel
+- **Startseite** mit animierter 3D-Arena im Hintergrund, Spieler-Level, Gold, Pokalen und Tab-Leiste
+  (🃏 Karten · ⚔️ Kampf · 🏆 Arenen · ☰ Mehr)
+- **Truhen** 🧰: Jeder Sieg bringt eine Truhe (Holz, Silber, Gold, Magisch). Truhe antippen → Timer läuft →
+  öffnen mit Animation: Gold und Karten fliegen heraus. Alle 2 Stunden gibt es eine **Gratis-Truhe**.
+- **Karten aufwerten** ⬆️: Sammle Kartenkopien + Gold, um Karten zu leveln (bis Level 9, +10 % Leben & Schaden pro Level).
+  Aufwerten gibt Erfahrung → **Spieler-Level** → stärkere Türme.
+- **4 Arenen** auf dem Pokalpfad, jede mit eigenem Look und neuen Karten:
+
+| Arena | Pokale | Look | Neue Karten |
+|---|:-:|---|---|
+| 1 · Wiesental | 0 | Gras, Bäume, Fluss | Startkarten |
+| 2 · Wüstenschlucht | 300 | Sand, Kakteen, Sandstein | Kuh-Koloss, Kürbiswerfer |
+| 3 · Glutfestung | 700 | Glutgestein, **Lavafluss**, glühende Kristalle | Aschezombie, Glutskelett |
+| 4 · Leerenreich | 1200 | Sternenhimmel, Obsidian-Säulen, Leerenfluss | Leerenkrabbler, **Schattenfürst** |
+
+- Der Computergegner wird mit deinen Pokalen stärker (höhere Kartenlevel).
+- Kampf-Animationen: Countdown 3-2-1-LOS, Karten fliegen aufs Feld, Mobs fallen beim Besiegen um,
+  gegnerische Karten werden angezeigt, Kronen ploppen auf, Belohnungsbildschirm nach dem Kampf.
+
+<table><tr>
+<td><img src="docs/karten.png" alt="Karten"></td><td><img src="docs/truhe.png" alt="Truhe öffnen"></td><td><img src="docs/pokalpfad.png" alt="Pokalpfad"></td>
+</tr><tr><td align="center">Karten &amp; Deck</td><td align="center">Truhe öffnen</td><td align="center">Pokalpfad</td></tr></table>
+
 ### Die Karten
 
 | Karte | ⚡ | Beschreibung |
@@ -74,6 +98,8 @@ Spiele Mob-Karten aus, verteidige deine Türme und zerstöre die des Gegners!
 | 👑 **Schattenfürst** | 7 | **Legendär!** Schwebender Obsidian-König, schleudert explodierende Seelenkugeln |
 
 ### Grafik
+Alle Blöcke haben einen klassischen, knackigen **16×16-Pixel-Look** (Gras, Erde, Stein, Bruchstein, Holzbretter,
+Stämme, Laub, Steinziegel, Sand …) – komplett im Code gemalt.
 Mit eingeschalteten Shadern (Einstellungen → *Shader* / *Shader-Effekte*):
 weiche Sonnenschatten, Abendsonnen-Licht, Himmel mit Sonne, animiertes Wasser mit Spiegelung und Gischt,
 Leuchten (Bloom), Lichtstrahlen, Laternen auf den Türmen und schwebende Lichtfunken.

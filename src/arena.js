@@ -5,6 +5,7 @@ import { createMobModel, animateMob, MOB_DEFS } from './models.js';
 import { CARDS, CARD_KEYS } from './cards.js';
 import { sfx } from './audio.js';
 import { PostFX } from './postfx.js';
+import { levelMul, towerMul } from './profile.js';
 
 const SUN_DIR = new THREE.Vector3(-0.6, 0.72, 0.38).normalize();
 
@@ -12,12 +13,15 @@ const SKY_VERT = `
 varying vec3 vDir;
 void main(){ vDir = position; vec4 p = projectionMatrix * modelViewMatrix * vec4(position, 1.0); gl_Position = p.xyww; }`;
 const SKY_FRAG = `
-uniform vec3 uSun;
+uniform vec3 uSun, uHorizon, uZenith;
+uniform float uStars;
 varying vec3 vDir;
+float h21(vec3 p){ return fract(sin(dot(p, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }
 void main(){
   vec3 d = normalize(vDir);
   float h = max(d.y, 0.0);
-  vec3 col = mix(vec3(1.0, 0.78, 0.55), vec3(0.28, 0.5, 0.92), pow(h, 0.45));
+  vec3 col = mix(uHorizon, uZenith, pow(h, 0.45));
+  if (uStars > 0.0) { vec3 q = floor(d * 160.0); float st = step(0.9965, h21(q)); col += vec3(1.6, 1.4, 2.0) * st * uStars * smoothstep(0.0, 0.3, h); }
   float s = max(dot(d, uSun), 0.0);
   col += vec3(1.0, 0.75, 0.45) * pow(s, 10.0) * 0.7;
   col += vec3(5.0, 4.2, 3.0) * smoothstep(0.9975, 0.9985, s);
@@ -34,17 +38,25 @@ void main(){
   gl_Position = projectionMatrix * viewMatrix * w;
 }`;
 const WATER_FRAG = `
-uniform float uTime;
-uniform vec3 uSun, uCam;
+uniform float uTime, uLava;
+uniform vec3 uSun, uCam, uDeep, uShallow;
 varying vec3 vW;
 void main(){
+  if (uLava > 0.5) {
+    float f = sin(vW.x * 1.7 + uTime * 0.8) * sin(vW.z * 2.3 - uTime * 0.6) + sin(vW.x * 4.1 - uTime * 1.3 + vW.z * 1.5) * 0.5;
+    vec3 lc = mix(vec3(1.6, 0.35, 0.05), vec3(3.2, 1.6, 0.3), smoothstep(-0.6, 1.2, f));
+    lc = mix(lc, vec3(0.35, 0.08, 0.03), smoothstep(0.75, 1.0, abs(vW.z)) * 0.6);
+    gl_FragColor = vec4(lc, 1.0);
+    #include <colorspace_fragment>
+    return;
+  }
   vec3 n = normalize(vec3(
     sin(vW.x * 2.0 + uTime * 1.5) * 0.12 + sin(vW.x * 5.3 - uTime * 2.1 + vW.z * 3.0) * 0.06,
     1.0,
     cos(vW.z * 3.0 + uTime * 1.2) * 0.12 + cos(vW.x * 4.1 + uTime) * 0.05));
   vec3 v = normalize(uCam - vW);
   float fr = pow(1.0 - max(dot(n, v), 0.0), 3.0) * 0.75 + 0.15;
-  vec3 col = mix(vec3(0.03, 0.2, 0.38), vec3(0.62, 0.8, 1.0), fr);
+  vec3 col = mix(uDeep, uShallow, fr);
   vec3 hv = normalize(uSun + v);
   col += vec3(1.0, 0.85, 0.6) * pow(max(dot(n, hv), 0.0), 90.0) * 2.5;
   float edge = smoothstep(0.7, 1.0, abs(vW.z));
@@ -102,6 +114,33 @@ class BlockBuilder {
     return new THREE.Mesh(g, mat);
   }
 }
+
+const THEMES = {
+  meadow: {
+    ground: { top: 'grass_top', side: 'grass_side', bottom: 'dirt' }, path: { top: 'dirt_path_top', side: 'dirt_path_side', bottom: 'dirt' },
+    wall: [{ all: 'stone_bricks' }, { all: 'mossy_stone_bricks' }], bank: 'dirt', bed: { all: 'sand' }, bridge: { all: 'oak_planks' }, rail: { top: 'oak_log_top', side: 'oak_log' },
+    decor: 'trees', liquid: 0, deep: [0.03, 0.2, 0.38], shallow: [0.62, 0.8, 1.0], horizon: [1.0, 0.78, 0.55], zenith: [0.28, 0.5, 0.92], stars: 0,
+    fog: 0xf0c898, hemi: [0xbcd8ff, 0x6a7a3a, 0.95], sun: [0xffdcae, 2.1], motes: [2.2, 1.9, 0.9], clear: 0x86bdf8,
+  },
+  desert: {
+    ground: { top: 'sand', side: 'sandstone', bottom: 'sandstone' }, path: { top: 'sandstone_top', side: 'sandstone', bottom: 'sandstone' },
+    wall: [{ top: 'sandstone_top', side: 'sandstone' }, { top: 'sandstone_top', side: 'chiseled_sandstone' }], bank: 'sandstone', bed: { all: 'sand' }, bridge: { all: 'birch_planks' }, rail: { top: 'birch_log_top', side: 'birch_log' },
+    decor: 'cactus', liquid: 0, deep: [0.02, 0.28, 0.4], shallow: [0.5, 0.88, 0.95], horizon: [1.0, 0.82, 0.55], zenith: [0.35, 0.6, 0.95], stars: 0,
+    fog: 0xf6d8a4, hemi: [0xd8e6ff, 0xc8a860, 1.0], sun: [0xfff0c8, 2.3], motes: [2.4, 2.0, 1.2], clear: 0xa8d0f8,
+  },
+  nether: {
+    ground: { all: 'glutgestein' }, path: { all: 'aschesand' }, wall: [{ all: 'glutziegel' }, { all: 'glutziegel' }], bank: 'glutgestein', bed: { all: 'glutgestein' },
+    bridge: { all: 'glutziegel' }, rail: { all: 'glutzaun' },
+    decor: 'nether', liquid: 1, deep: [0, 0, 0], shallow: [0, 0, 0], horizon: [0.75, 0.22, 0.1], zenith: [0.22, 0.04, 0.03], stars: 0,
+    fog: 0x5a1a10, hemi: [0xff9a70, 0x401010, 0.9], sun: [0xffb080, 1.4], motes: [3.0, 1.2, 0.3], clear: 0x3a0c06,
+  },
+  void: {
+    ground: { all: 'leerenstein' }, path: { all: 'leerenstein_ziegel' }, wall: [{ all: 'sternenziegel' }, { top: 'sternensaeule_top', side: 'sternensaeule' }], bank: 'leerenstein', bed: { all: 'obsidian' },
+    bridge: { all: 'sternenziegel' }, rail: { all: 'obsidian' },
+    decor: 'void', liquid: 0, deep: [0.04, 0.0, 0.1], shallow: [0.45, 0.2, 0.75], horizon: [0.25, 0.12, 0.38], zenith: [0.03, 0.01, 0.08], stars: 1,
+    fog: 0x1a1030, hemi: [0xc8b0ff, 0x302040, 0.85], sun: [0xe8d8ff, 1.5], motes: [1.6, 0.8, 3.0], clear: 0x120a1c,
+  },
+};
 
 const TILES = {
   grass: { top: 'grass_top', side: 'grass_side', bottom: 'dirt' },
@@ -182,6 +221,11 @@ export class Arena {
     this.deck = opts.deck;
     this.difficulty = opts.difficulty || 1;
     this.onEnd = opts.onEnd;
+    this.preview = !!opts.preview;
+    this.theme = THEMES[opts.theme] || THEMES.meadow;
+    // card / king tower levels per team: [{cards:{key:lvl}, king}, {card:lvl, king}]
+    this.levels = opts.levels || [{ cards: {}, king: 1 }, { card: 1, king: 1 }];
+    this.aiDeck = opts.aiDeck || null;
     this.portraits = getPortraits();
     const st = opts.settings || {};
     this.fx = st.shaders !== false && !st.compat;          // shadows, sky, water shader
@@ -191,16 +235,17 @@ export class Arena {
     if (this.fx) { this.renderer.shadowMap.enabled = true; this.renderer.shadowMap.type = THREE.PCFSoftShadowMap; }
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
-    this.renderer.setClearColor(0x86bdf8);
+    this.renderer.setClearColor(this.theme.clear);
     container.appendChild(this.renderer.domElement);
     this.canvas = this.renderer.domElement;
 
     this.scene = new THREE.Scene();
-    this.scene.fog = new THREE.Fog(this.fx ? 0xf0c898 : 0x9ec9f2, 60, 120);
+    const TH = this.theme;
+    this.scene.fog = new THREE.Fog(this.fx ? TH.fog : TH.clear, 60, 120);
     this.camera = new THREE.PerspectiveCamera(40, 1, 0.1, 300);
     if (this.fx) {
-      this.scene.add(new THREE.HemisphereLight(0xbcd8ff, 0x6a7a3a, 0.95));
-      const sun = new THREE.DirectionalLight(0xffdcae, 2.1);
+      this.scene.add(new THREE.HemisphereLight(TH.hemi[0], TH.hemi[1], TH.hemi[2]));
+      const sun = new THREE.DirectionalLight(TH.sun[0], TH.sun[1]);
       sun.position.copy(SUN_DIR).multiplyScalar(60);
       sun.castShadow = true;
       const sc = sun.shadow.camera;
@@ -209,7 +254,7 @@ export class Arena {
       sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.03;
       this.scene.add(sun); this.scene.add(sun.target);
       // gradient sky dome with sun
-      this.sky = new THREE.Mesh(new THREE.SphereGeometry(200, 24, 12), new THREE.ShaderMaterial({ vertexShader: SKY_VERT, fragmentShader: SKY_FRAG, uniforms: { uSun: { value: SUN_DIR } }, side: THREE.BackSide, depthWrite: false, fog: false }));
+      this.sky = new THREE.Mesh(new THREE.SphereGeometry(200, 24, 12), new THREE.ShaderMaterial({ vertexShader: SKY_VERT, fragmentShader: SKY_FRAG, uniforms: { uSun: { value: SUN_DIR }, uHorizon: { value: new THREE.Vector3(...TH.horizon) }, uZenith: { value: new THREE.Vector3(...TH.zenith) }, uStars: { value: TH.stars } }, side: THREE.BackSide, depthWrite: false, fog: false }));
       this.sky.frustumCulled = false; this.sky.renderOrder = -1;
       this.scene.add(this.sky);
     } else {
@@ -226,7 +271,7 @@ export class Arena {
     this.atlasTex.colorSpace = THREE.SRGBColorSpace;
     this.blockMat = this.fx ? new THREE.MeshLambertMaterial({ map: this.atlasTex, vertexColors: true, alphaTest: 0.5 }) : new THREE.MeshBasicMaterial({ map: this.atlasTex, vertexColors: true, alphaTest: 0.5 });
     this.waterMat = this.fx
-      ? new THREE.ShaderMaterial({ vertexShader: WATER_VERT, fragmentShader: WATER_FRAG, uniforms: { uTime: { value: 0 }, uSun: { value: SUN_DIR }, uCam: { value: new THREE.Vector3() } }, transparent: true, depthWrite: false })
+      ? new THREE.ShaderMaterial({ vertexShader: WATER_VERT, fragmentShader: WATER_FRAG, uniforms: { uTime: { value: 0 }, uSun: { value: SUN_DIR }, uCam: { value: new THREE.Vector3() }, uLava: { value: TH.liquid }, uDeep: { value: new THREE.Vector3(...TH.deep) }, uShallow: { value: new THREE.Vector3(...TH.shallow) } }, transparent: !TH.liquid, depthWrite: !!TH.liquid })
       : new THREE.MeshBasicMaterial({ map: this.atlasTex, vertexColors: true, transparent: true, opacity: 0.8, depthWrite: false });
     this.glowMats = new Map();
     this.particleGeo = new THREE.BoxGeometry(1, 1, 1);
@@ -235,8 +280,8 @@ export class Arena {
     this.buildWorld();
 
     this.ents = [];
-    this.bars = $('ar-bars');
-    this.bars.innerHTML = '';
+    this.bars = this.preview ? document.createElement('div') : $('ar-bars');
+    if (!this.preview) this.bars.innerHTML = '';
     this.projectiles = [];
     this.particles = [];
     this.effects = [];
@@ -257,9 +302,11 @@ export class Arena {
       this.addTower(team, true, 0, s * 14);
     }
 
+    if (this.preview) { this.startPreview(); return; }
+
     // hands
     const shuffle = (a) => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
-    const aiDeck = this.makeAiDeck(shuffle);
+    const aiDeck = this.aiDeck || this.makeAiDeck(shuffle);
     this.hands = [this.makeHand(shuffle(this.deck)), this.makeHand(shuffle(aiDeck))];
     this.ai = { think: 1.5 };
 
@@ -276,7 +323,58 @@ export class Arena {
     this.running = true;
     this.loop = this.loop.bind(this);
     requestAnimationFrame(this.loop);
-    this.toast('Zerstöre die Türme des Gegners!', 2.5);
+    this.countdown = 3.6;
+    this.showCount('3');
+  }
+
+  showCount(t) {
+    const el = $('ar-count');
+    if (!el) return;
+    el.textContent = t;
+    el.classList.remove('hidden', 'go');
+    if (t === 'LOS!') el.classList.add('go');
+    el.style.animation = 'none'; void el.offsetWidth; el.style.animation = '';
+    if (!t) el.classList.add('hidden');
+  }
+
+  // ---------- home-screen preview: slow camera orbit with wandering mobs ----------
+  startPreview() {
+    this.hands = null;
+    this.over = true;
+    const keys = ['zombie', 'skeleton', 'spider', 'pig', 'chicken', 'sheep', 'cow', 'villager', 'ash_zombie', 'shadow_lord'];
+    for (let i = 0; i < 9; i++) {
+      const team = i % 2, k = keys[Math.floor(Math.random() * keys.length)];
+      const u = this.spawnUnit(team, k, (Math.random() * 2 - 1) * 7, (team ? -1 : 1) * (3 + Math.random() * 9));
+      u.deploy = 0; u.y = u.air ? (u.card.airHeight || 1.4) : 0; u.wait = Math.random() * 2;
+    }
+    this.rect = { x: 0, y: 0, w: window.innerWidth, h: window.innerHeight };
+    this._resize = () => this.resize();
+    window.addEventListener('resize', this._resize);
+    this.resize();
+    this.last = performance.now();
+    this.running = true;
+    this.loop = this.loop.bind(this);
+    requestAnimationFrame(this.loop);
+  }
+
+  updatePreview(dt) {
+    for (const u of this.ents) {
+      if (u.kind === 'tower') { animateMob(u.guard, this.clock, 0, Math.sin(this.clock * 0.7 + u.x) * 0.5, 0); continue; }
+      u.t += dt; u.walk = 0;
+      if (u.wait > 0) { u.wait -= dt; continue; }
+      if (!u.goal || Math.hypot(u.goal[0] - u.x, u.goal[1] - u.z) < 0.3) {
+        const s = u.team ? -1 : 1;
+        u.goal = [(Math.random() * 2 - 1) * 7.5, s * (2.5 + Math.random() * 11)];
+        u.wait = 0.5 + Math.random() * 2.5;
+        continue;
+      }
+      const sp = u.card.speed;
+      const saved = u.card.speed; u.card.speed = sp * 0.6;
+      this.moveToward(u, u.goal[0], u.goal[1], dt);
+      u.card.speed = saved;
+      if (u.air) u.y = (u.card.airHeight || 1.4) + Math.sin(u.t * 3) * 0.12;
+    }
+    this.separate();
   }
 
   makeAiDeck(shuffle) {
@@ -299,6 +397,7 @@ export class Arena {
 
   // ---------- world building ----------
   buildWorld() {
+    const TH = this.theme;
     const b = new BlockBuilder();
     const water = new BlockBuilder();
     const rnd = (() => { let s = 1234567; return () => ((s = (s * 16807) % 2147483647) / 2147483647); })();
@@ -309,34 +408,34 @@ export class Arena {
       const inArena = x >= -HALF_W && x < HALF_W && z >= -HALF_L && z < HALF_L;
       const river = z >= -RIVER && z < RIVER && x >= -HALF_W - 13 && x < HALF_W + 13;
       if (river && !(inArena && onBridge(x))) {
-        b.box(x, -3, z, x + 1, -2, z + 1, TILES.sand, 'bnsew');
-        water.face([x, -0.3, z + 1], [1, 0, 0], [0, 0, -1], 'water', 1);
+        b.box(x, -3, z, x + 1, -2, z + 1, TH.bed, 'bnsew');
+        water.face([x, -0.3, z + 1], [1, 0, 0], [0, 0, -1], TH.liquid ? 'lava' : 'water', 1);
         continue;
       }
       if (river) {
         // bridge: planks deck with log rails
-        b.block(x, -1, z, TILES.planks);
+        b.block(x, -1, z, TH.bridge);
         continue;
       }
-      const t = inArena ? (onPath(x, z) ? TILES.path : TILES.grass) : TILES.grass;
+      const t = inArena && onPath(x, z) ? TH.path : TH.ground;
       b.block(x, -1, z, t, 'bnsew');
     }
     // river bank walls (the sides of the channel)
     for (let x = -22; x < 22; x++) {
       const inArena = x >= -HALF_W && x < HALF_W;
       if (inArena && onBridge(x)) continue;
-      b.face([x, -2, -RIVER], [1, 0, 0], [0, 2, 0], 'dirt', 0.62);
-      b.face([x + 1, -2, RIVER], [-1, 0, 0], [0, 2, 0], 'dirt', 0.75);
+      b.face([x, -2, -RIVER], [1, 0, 0], [0, 2, 0], TH.bank, 0.62);
+      b.face([x + 1, -2, RIVER], [-1, 0, 0], [0, 2, 0], TH.bank, 0.75);
     }
     // bridge rails
     for (const l of LANES) for (let z = -RIVER - 1; z <= RIVER; z++) {
-      for (const x of [l - BRIDGE_HW - 0.25, l + BRIDGE_HW]) b.box(x, 0, z, x + 0.25, 0.5, z + 1, TILES.oak);
+      for (const x of [l - BRIDGE_HW - 0.25, l + BRIDGE_HW]) b.box(x, 0, z, x + 0.25, 0.5, z + 1, TH.rail);
     }
     // arena wall
-    for (let x = -HALF_W - 1; x <= HALF_W; x++) for (const z of [-HALF_L - 1, HALF_L]) b.block(x, 0, z, rnd() < 0.25 ? TILES.mossy : TILES.bricks);
+    for (let x = -HALF_W - 1; x <= HALF_W; x++) for (const z of [-HALF_L - 1, HALF_L]) b.block(x, 0, z, TH.wall[rnd() < 0.25 ? 1 : 0]);
     for (let z = -HALF_L; z < HALF_L; z++) for (const x of [-HALF_W - 1, HALF_W]) {
       if (z >= -RIVER && z < RIVER) continue;
-      b.block(x, 0, z, rnd() < 0.25 ? TILES.mossy : TILES.bricks);
+      b.block(x, 0, z, TH.wall[rnd() < 0.25 ? 1 : 0]);
     }
     // trees, pumpkins and hay outside the arena
     const tree = (x, z, kind) => {
@@ -358,8 +457,24 @@ export class Arena {
       if (spots.some(([a, c]) => Math.abs(a - x) < 4 && Math.abs(c - z) < 4)) continue;
       spots.push([x, z]);
       const r = rnd();
-      if (r < 0.75) tree(x, z, rnd() < 0.35 ? 1 : 0);
-      else b.block(x, 0, z, r < 0.88 ? TILES.pumpkin : TILES.hay);
+      if (TH.decor === 'trees') {
+        if (r < 0.75) tree(x, z, rnd() < 0.35 ? 1 : 0);
+        else b.block(x, 0, z, r < 0.88 ? TILES.pumpkin : TILES.hay);
+      } else if (TH.decor === 'cactus') {
+        if (r < 0.6) { const h = 2 + Math.floor(rnd() * 2); for (let y = 0; y < h; y++) b.box(x + 0.06, y, z + 0.06, x + 0.94, y + 1, z + 0.94, { top: 'cactus_top', side: 'cactus_side', bottom: 'cactus_top' }); }
+        else if (r < 0.85) { b.block(x, 0, z, { top: 'sandstone_top', side: 'sandstone' }); if (rnd() < 0.6) b.block(x + 1, 0, z, { top: 'sandstone_top', side: 'sandstone' }); if (rnd() < 0.5) b.block(x, 1, z, { top: 'sandstone_top', side: 'chiseled_sandstone' }); }
+        else b.block(x, 0, z, TILES.hay);
+      } else if (TH.decor === 'nether') {
+        const h = 2 + Math.floor(rnd() * 4);
+        for (let y = 0; y < h; y++) b.block(x, y, z, rnd() < 0.2 ? { all: 'glutquarz_erz' } : { all: 'glutgestein' });
+        if (rnd() < 0.7) this.glowCube(x + 0.5, h + 0.4, z + 0.5, [3.2, 1.6, 0.5], 0.7);
+        if (r < 0.4) b.block(x + 1, 0, z, { all: 'glutgestein' });
+      } else if (TH.decor === 'void') {
+        const h = 3 + Math.floor(rnd() * 5);
+        for (let y = 0; y < h; y++) b.block(x, y, z, { all: 'obsidian' });
+        b.block(x, h, z, { top: 'sternensaeule_top', side: 'sternensaeule' });
+        this.glowCube(x + 0.5, h + 1.6, z + 0.5, [1.6, 0.9, 3.4], 0.6);
+      }
     }
     const world = b.mesh(this.blockMat);
     world.castShadow = world.receiveShadow = true;
@@ -377,7 +492,7 @@ export class Arena {
       const n = 70, pos = new Float32Array(n * 3);
       for (let i = 0; i < n; i++) { pos[i * 3] = (Math.random() * 2 - 1) * 14; pos[i * 3 + 1] = 0.5 + Math.random() * 4; pos[i * 3 + 2] = (Math.random() * 2 - 1) * 20; }
       const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-      this.motes = new THREE.Points(g, new THREE.PointsMaterial({ color: new THREE.Color(2.2, 1.9, 0.9), size: 0.13, transparent: true, opacity: 0.85, depthWrite: false }));
+      this.motes = new THREE.Points(g, new THREE.PointsMaterial({ color: new THREE.Color(...TH.motes), size: 0.13, transparent: true, opacity: 0.85, depthWrite: false }));
       this.scene.add(this.motes);
     }
 
@@ -392,6 +507,14 @@ export class Arena {
     this.ring = new THREE.Mesh(new THREE.RingGeometry(0.9, 1, 48), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.8, depthWrite: false, side: THREE.DoubleSide }));
     this.ring.rotation.x = -Math.PI / 2; this.ring.position.y = 0.05; this.ring.visible = false; this.ring.renderOrder = 4;
     this.scene.add(this.ring);
+  }
+
+  glowCube(x, y, z, rgb, size) {
+    if (!this.floaters) this.floaters = [];
+    const m = new THREE.Mesh(this.particleGeo, this.glowMat(rgb));
+    m.scale.setScalar(size); m.position.set(x, y, z); m.rotation.set(0.6, 0.3, 0.5);
+    m.userData.baseY = y;
+    this.scene.add(m); this.floaters.push(m);
   }
 
   addTower(team, king, x, z) {
@@ -443,9 +566,11 @@ export class Arena {
     }
     g.add(guard.root);
     guard.root.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+    const tmul = towerMul(this.levels[team].king);
+    const thp = Math.round((king ? 2600 : 1500) * tmul);
     const ent = {
-      kind: 'tower', king, team, x, z, hw, h, radius: hw, hp: king ? 2600 : 1500, maxHp: king ? 2600 : 1500,
-      dmg: king ? 70 : 55, hitSpeed: king ? 1.0 : 0.8, range: king ? 8 : 7.5, atkCd: 0, active: !king, alive: true,
+      kind: 'tower', king, team, x, z, hw, h, radius: hw, hp: thp, maxHp: thp,
+      dmg: Math.round((king ? 70 : 55) * tmul), hitSpeed: king ? 1.0 : 0.8, range: king ? 8 : 7.5, atkCd: 0, active: !king, alive: true,
       group: g, guard, target: null, flash: 0, lanterns,
     };
     this.ents.push(ent);
@@ -611,6 +736,7 @@ export class Arena {
     }
     const p = this.groundPoint(e.clientX, e.clientY);
     if (!p) return;
+    if (this.countdown > 0) { this.toast('Gleich geht es los …', 0.8); return; }
     const key = this.hands[0].hand[this.sel];
     const c = CARDS[key];
     if (!this.canDeploy(0, key, p.x, p.z)) { this.toast('Hier kannst du nichts ausspielen', 1.2); return; }
@@ -643,6 +769,7 @@ export class Arena {
     const key = this.hands[team].hand[i];
     const c = CARDS[key];
     this.energy[team] -= c.cost;
+    if (team === 0) this.flyCard(i, key, x, z); else this.enemyCardPop(key, x, z);
     this.cycle(team, i);
     if (team === 0) this.renderHand();
     if (c.type === 'spell') this.castSpell(team, key, x, z);
@@ -656,8 +783,11 @@ export class Arena {
     }
   }
 
+  lvlOf(team, key) { const L = this.levels[team]; return (L.cards && L.cards[key]) || L.card || 1; }
+
   spawnUnit(team, key, x, z) {
-    const c = CARDS[key];
+    const base = CARDS[key], mul = levelMul(this.lvlOf(team, key));
+    const c = Object.assign({}, base, { hp: Math.round(base.hp * mul), dmg: Math.round(base.dmg * mul) });
     const m = createMobModel(c.mob);
     m.root.scale.setScalar(c.scale * MODEL_SCALE);
     m.root.rotation.y = team === 0 ? Math.PI : 0;
@@ -677,7 +807,8 @@ export class Arena {
   }
 
   castSpell(team, key, x, z) {
-    const c = CARDS[key];
+    const base = CARDS[key];
+    const c = Object.assign({}, base, { dmg: Math.round(base.dmg * levelMul(this.lvlOf(team, key))) });
     if (key === 'powder') {
       const tex = new THREE.CanvasTexture(kegCanvas()); tex.magFilter = THREE.NearestFilter; tex.colorSpace = THREE.SRGBColorSpace;
       const keg = new THREE.Mesh(new THREE.BoxGeometry(0.9, 1.1, 0.9), new THREE.MeshLambertMaterial({ map: tex }));
@@ -770,8 +901,15 @@ export class Arena {
     e.hp = 0;
     if (e.bar) { e.bar.remove(); e.bar = null; }
     if (e.kind === 'unit') {
-      this.scene.remove(e.model.root); this.scene.remove(e.disc);
-      this.burst(e.x, e.y + 0.4, e.z, [0xdddddd, 0xbbbbbb, 0xffffff], 10, 1.5, 0.14);
+      this.scene.remove(e.disc);
+      const root = e.model.root, side = Math.random() < 0.5 ? 1 : -1, y0 = root.position.y, sc = root.scale.x;
+      for (const mat of e.model.mats) { mat.transparent = true; if (mat.emissive) mat.emissive.setRGB(0.5, 0.5, 0.5); }
+      this.effects.push({ t: 0, dur: 0.55, update: (f) => {
+        root.rotation.z = side * Math.min(1, f * 2.2) * Math.PI / 2;
+        root.position.y = Math.max(0, y0 * (1 - f * 2)) - Math.max(0, f - 0.5) * 0.6;
+        for (const mat of e.model.mats) mat.opacity = 1 - Math.max(0, f - 0.4) / 0.6;
+        root.scale.setScalar(sc * (1 - Math.max(0, f - 0.6) * 0.8));
+      }, end: () => { this.scene.remove(root); this.burst(e.x, 0.3, e.z, [0xdddddd, 0xbbbbbb, 0xffffff], 12, 1.6, 0.16); } });
       return;
     }
     // tower destroyed
@@ -797,10 +935,51 @@ export class Arena {
     if (e.king || (this.overtime && this.crowns[0] !== this.crowns[1])) this.finish();
   }
 
+  screenOf(x, y, z) {
+    const v = new THREE.Vector3(x, y, z).project(this.camera);
+    return [((v.x + 1) / 2) * this.rect.w, ((1 - v.y) / 2) * this.rect.h];
+  }
+
+  flyCard(i, key, x, z) {
+    const src = this.cardEls[i];
+    if (!src) return;
+    const r = src.getBoundingClientRect();
+    const [tx, ty] = this.screenOf(x, 0.5, z);
+    const el = document.createElement('div');
+    el.className = 'ar-card ar-fly';
+    el.innerHTML = cardHTML(key, this.portraits);
+    el.style.cssText = `left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px;`;
+    document.body.appendChild(el);
+    requestAnimationFrame(() => {
+      el.style.transform = `translate(${tx - r.left - r.width / 2}px, ${ty - r.top - r.height / 2}px) scale(0.25) rotate(-12deg)`;
+      el.style.opacity = '0';
+    });
+    setTimeout(() => el.remove(), 450);
+    // shockwave ring where the card lands
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.6, 0.8, 32), new THREE.MeshBasicMaterial({ color: 0x9ac0ff, transparent: true, opacity: 0.8, depthWrite: false, side: THREE.DoubleSide }));
+    ring.rotation.x = -Math.PI / 2; ring.position.set(x, 0.06, z); ring.renderOrder = 4; this.scene.add(ring);
+    this.effects.push({ t: 0, dur: 0.6, update: (f) => { ring.scale.setScalar(1 + f * 2.2); ring.material.opacity = 0.8 * (1 - f); }, end: () => { this.scene.remove(ring); ring.geometry.dispose(); } });
+  }
+
+  enemyCardPop(key, x, z) {
+    const el = document.createElement('div');
+    el.className = 'ar-enemycard';
+    el.innerHTML = `<img src="${this.portraits[key]}"><span>${CARDS[key].cost}</span>`;
+    this.bars.appendChild(el);
+    const ent = { pop: el, x, z, t: 0 };
+    this.effects.push({ t: 0, dur: 1.6, update: (f) => {
+      const [sx, sy] = this.screenOf(ent.x, 2.2, ent.z);
+      el.style.transform = `translate(${sx | 0}px, ${(sy - f * 18) | 0}px)`;
+      el.style.opacity = f < 0.75 ? 1 : 1 - (f - 0.75) / 0.25;
+    }, end: () => el.remove() });
+  }
+
   updateCrowns() {
-    const draw = (el, n, cls) => { el.innerHTML = [0, 1, 2].map((i) => `<span class="crown ${i < n ? 'on ' + cls : ''}">♛</span>`).join(''); };
-    draw($('ar-crowns-me'), this.crowns[0], 'blue');
-    draw($('ar-crowns-ai'), this.crowns[1], 'red');
+    const prev = this._prevCrowns || [0, 0];
+    const draw = (el, n, cls, before) => { el.innerHTML = [0, 1, 2].map((i) => `<span class="crown ${i < n ? 'on ' + cls : ''} ${i < n && i >= before ? 'pop' : ''}">♛</span>`).join(''); };
+    draw($('ar-crowns-me'), this.crowns[0], 'blue', prev[0]);
+    draw($('ar-crowns-ai'), this.crowns[1], 'red', prev[1]);
+    this._prevCrowns = this.crowns.slice();
   }
 
   gap(a, b) {
@@ -1037,7 +1216,7 @@ export class Arena {
   loop(now) {
     if (!this.running) return;
     requestAnimationFrame(this.loop);
-    const dt = Math.min(0.05, (now - this.last) / 1000);
+    const dt = Math.min(0.05, Math.max(0, (now - this.last) / 1000));
     this.last = now;
     if (!this.paused) this.update(dt);
     this.render(dt);
@@ -1045,6 +1224,16 @@ export class Arena {
 
   update(dt) {
     this.clock += dt;
+    if (this.preview) { this.updatePreview(dt); this.updateParticles(dt); return; }
+    if (this.countdown > 0) {
+      const before = Math.ceil(this.countdown - 0.6);
+      this.countdown -= dt;
+      const now = Math.ceil(this.countdown - 0.6);
+      if (now !== before) { this.showCount(now > 0 ? String(now) : 'LOS!'); sfx.click(); if (now <= 0) sfx.pop(); }
+      if (this.countdown <= 0) this.showCount('');
+      for (const e of this.ents) if (e.kind === 'tower') animateMob(e.guard, this.clock, 0, 0, 0);
+      return;
+    }
     if (!this.over) {
       this.time -= dt;
       const dbl = this.overtime || this.time <= DOUBLE_AT;
@@ -1071,6 +1260,16 @@ export class Arena {
       f.update(Math.min(1, f.t / f.dur), dt, f.t);
       if (f.t >= f.dur) { this.effects.splice(i, 1); f.end && f.end(); }
     }
+    this.updateParticles(dt);
+    if (this.ents.length > 80) this.ents = this.ents.filter((e) => e.alive || e.kind === 'tower');
+  }
+
+  updateParticles(dt) {
+    for (let i = this.effects.length - 1; i >= 0 && this.preview; i--) {
+      const f = this.effects[i];
+      f.t += dt; f.update(Math.min(1, f.t / f.dur), dt, f.t);
+      if (f.t >= f.dur) { this.effects.splice(i, 1); f.end && f.end(); }
+    }
     for (let i = this.particles.length - 1; i >= 0; i--) {
       const p = this.particles[i];
       p.life -= dt; p.vy -= 14 * dt;
@@ -1079,7 +1278,6 @@ export class Arena {
       p.m.scale.multiplyScalar(1 - dt * 0.8);
       if (p.life <= 0) { this.scene.remove(p.m); this.particles.splice(i, 1); }
     }
-    if (this.ents.length > 80) this.ents = this.ents.filter((e) => e.alive || e.kind === 'tower');
   }
 
   render(dt) {
@@ -1117,6 +1315,7 @@ export class Arena {
       this.waterMat.uniforms.uTime.value = this.clock;
       this.waterMat.uniforms.uCam.value.copy(this.camera.position);
     } else if (this.waterMesh) this.waterMesh.position.y = Math.sin(this.clock * 1.6) * 0.04;
+    if (this.floaters) for (const f of this.floaters) { f.rotation.y += dt * 0.8; f.position.y = f.userData.baseY + Math.sin(this.clock * 1.4 + f.position.x) * 0.15; }
     if (this.motes) {
       const a = this.motes.geometry.attributes.position;
       for (let i = 0; i < a.count; i++) {
@@ -1126,7 +1325,13 @@ export class Arena {
       a.needsUpdate = true;
       this.motes.material.opacity = 0.6 + Math.sin(this.clock * 2) * 0.25;
     }
-    // camera shake
+    // camera shake / preview orbit
+    if (this.preview) {
+      const a = this.clock * 0.06 + 0.6, R = this.rect.w > this.rect.h ? 30 : 36;
+      this.camBase.set(Math.sin(a) * R, 17 + Math.sin(this.clock * 0.13) * 2, Math.cos(a) * R);
+      this.camera.position.copy(this.camBase);
+      this.camera.lookAt(0, 0, 0);
+    }
     this.camera.position.copy(this.camBase);
     if (this.shake > 0) {
       this.shake -= dt;
@@ -1144,6 +1349,7 @@ export class Arena {
       this.renderer.setRenderTarget(null);
       this.renderer.render(this.scene, this.camera);
     }
+    if (this.preview) return;
     this.updateBars();
     this.updateHUD();
   }
@@ -1179,6 +1385,11 @@ export class Arena {
     this.renderer.setSize(W, H);
     if (this.post) this.post.setSize(W, H);
     this.camera.clearViewOffset();
+    if (this.preview) {
+      this.camera.aspect = W / H; this.camera.fov = W > H ? 40 : 55; this.camera.updateProjectionMatrix();
+      this.rect = { x: 0, y: 0, w: W, h: H }; this.camBase = this.camera.position.clone();
+      return;
+    }
     const pr = $('ar-panel').getBoundingClientRect();
     const landscape = W > H;
     const r = landscape ? { x: 0, y: 0, w: Math.max(100, W - pr.width), h: H } : { x: 0, y: 0, w: W, h: Math.max(100, H - pr.height) };
@@ -1240,10 +1451,13 @@ export class Arena {
     window.removeEventListener('pointermove', this._pm);
     window.removeEventListener('pointerup', this._pu);
     window.removeEventListener('pointerdown', this._pd);
-    this.cardEls.forEach((el) => { el.onpointerdown = null; el.dataset.key = ''; el.innerHTML = ''; });
-    this.nextEl.dataset.key = ''; this.nextEl.innerHTML = '';
-    this.bars.innerHTML = '';
-    this.hud.classList.add('hidden');
+    if (!this.preview) {
+      this.cardEls.forEach((el) => { el.onpointerdown = null; el.dataset.key = ''; el.innerHTML = ''; });
+      this.nextEl.dataset.key = ''; this.nextEl.innerHTML = '';
+      this.bars.innerHTML = '';
+      this.hud.classList.add('hidden');
+      this.showCount('');
+    }
     this.scene.traverse((o) => { if (o.geometry) o.geometry.dispose(); });
     this.atlasTex.dispose();
     if (this.post) { for (const t of [this.post.main, this.post.bloomA, this.post.bloomB, this.post.rayA, this.post.rayB]) t.dispose(); }

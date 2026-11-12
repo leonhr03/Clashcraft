@@ -653,6 +653,205 @@ function paintItem(p, def) {
   P.missing(p);
 }
 
+// ---------- classic 16x16 look ----------
+// Crisp, hand-pixelled style: every texel is one clean 16x16 pixel, picked from a small palette and
+// clustered with smoothed noise. Overrides the softer painters above for the most common blocks.
+const pal = (...h) => h.map(hex);
+function smooth16(p, passes = 2) {
+  let g = new Float32Array(256).map(() => p.r());
+  for (let k = 0; k < passes; k++) {
+    const n = new Float32Array(256);
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+      let s = 0;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) s += g[((y + dy + 16) % 16) * 16 + ((x + dx + 16) % 16)] * (dx || dy ? 1 : 2);
+      n[y * 16 + x] = s / 10;
+    }
+    g = n;
+  }
+  // normalise to 0..1
+  let lo = 1, hi = 0; for (const v of g) { lo = Math.min(lo, v); hi = Math.max(hi, v); }
+  return g.map((v) => (v - lo) / (hi - lo || 1));
+}
+// palette ordered dark -> light; mix of clustered noise and per-pixel randomness
+function texel(p, palette, mixRnd = 0.45, passes = 2) {
+  const g = smooth16(p, passes);
+  const out = [];
+  for (let i = 0; i < 256; i++) {
+    const v = g[i] * (1 - mixRnd) + p.r() * mixRnd;
+    out.push(palette[Math.min(palette.length - 1, Math.floor(v * palette.length))]);
+  }
+  return out;
+}
+function paint16(p, cols) { for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) if (cols[y * 16 + x]) p.set(x, y, cols[y * 16 + x]); }
+
+const GRASS = pal('#3f7a22', '#4a8a2a', '#56992f', '#5fa636', '#6bb33f', '#79c04a');
+const DIRT = pal('#58391f', '#694629', '#79553a', '#866143', '#946d4c');
+const STONE = pal('#626264', '#6e6e70', '#7a7a7c', '#848486', '#8f8f91', '#9b9b9d');
+const SAND = pal('#c9bd85', '#d4c992', '#dcd29c', '#e3daa8', '#ebe3b6');
+const OAKP = { hi: hex('#bf9a63'), a: hex('#b08b55'), b: hex('#a07c48'), lo: hex('#8a6a3b'), seam: hex('#664c29') };
+
+P.grass_top = (p) => {
+  paint16(p, texel(p, GRASS, 0.5));
+  for (let i = 0; i < 10; i++) p.set(Math.floor(p.r() * 16), Math.floor(p.r() * 16), hex('#86cc56'));
+};
+P.dirt = (p) => {
+  paint16(p, texel(p, DIRT, 0.55));
+  for (let i = 0; i < 5; i++) { const x = Math.floor(p.r() * 15), y = Math.floor(p.r() * 15); p.set(x, y, hex('#9a948c')); if (p.r() < 0.5) p.set(x + 1, y, hex('#7d7872')); }
+};
+function overhang(p, palette, edgeCol) {
+  for (let x = 0; x < 16; x++) {
+    let h = 3 + Math.floor(p.r() * 2);
+    if (p.r() < 0.25) h += 1 + Math.floor(p.r() * 2);
+    for (let y = 0; y < h; y++) p.set(x, y, palette[Math.max(0, Math.min(palette.length - 1, palette.length - 1 - Math.floor(p.r() * 3) - (y >= h - 1 ? 2 : 0)))]);
+    p.set(x, h, edgeCol);
+  }
+}
+P.grass_side = (p) => { P.dirt(p); overhang(p, GRASS, hex('#4f3a22')); };
+P.snowy_grass_side = (p) => { P.dirt(p); overhang(p, pal('#c9d6e3', '#dbe5ef', '#e8eff6', '#f4f8fc'), hex('#a8b4c0')); };
+P.stone = (p) => {
+  paint16(p, texel(p, STONE, 0.4));
+  for (let i = 0; i < 7; i++) {
+    const x = Math.floor(p.r() * 16), y = Math.floor(p.r() * 16), l = 2 + Math.floor(p.r() * 3);
+    for (let k = 0; k < l; k++) p.set((x + k) % 16, y, STONE[p.r() < 0.5 ? 0 : 1]);
+  }
+};
+P.sand = (p) => { paint16(p, texel(p, SAND, 0.6, 1)); for (let i = 0; i < 6; i++) p.set(Math.floor(p.r() * 16), Math.floor(p.r() * 16), hex('#b8aa72')); };
+P.dirt_path_top = (p) => paint16(p, texel(p, pal('#7d6234', '#8c6f3d', '#9a7c46', '#a88952', '#b4955e'), 0.55));
+P.dirt_path_side = (p) => { P.dirt(p); const t = pal('#8c6f3d', '#9a7c46', '#a88952'); for (let x = 0; x < 16; x++) { const h = 2 + (p.r() < 0.3 ? 1 : 0); for (let y = 0; y < h; y++) p.set(x, y, t[Math.floor(p.r() * 3)]); } };
+
+// stones with dark outlines and light top-left edges
+function stones(p, seeds, palette, mortar, mortar2) {
+  const pts = [];
+  for (let i = 0; i < seeds; i++) pts.push([p.r() * 16, p.r() * 16, Math.floor(p.r() * palette.length)]);
+  for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+    let d1 = 99, d2 = 99, best = null, bx = 0, by = 0;
+    for (const s of pts) for (let ox = -16; ox <= 16; ox += 16) for (let oy = -16; oy <= 16; oy += 16) {
+      const dx = x + 0.5 - (s[0] + ox), dy = y + 0.5 - (s[1] + oy), d = Math.hypot(dx * 1.15, dy);
+      if (d < d1) { d2 = d1; d1 = d; best = s; bx = dx; by = dy; } else if (d < d2) d2 = d;
+    }
+    if (d2 - d1 < 1.0) { p.set(x, y, p.r() < 0.6 ? mortar : mortar2); continue; }
+    let idx = best[2] + (bx + by < -1.2 ? 1 : bx + by > 1.6 ? -1 : 0) + (p.r() < 0.2 ? (p.r() < 0.5 ? 1 : -1) : 0);
+    p.set(x, y, palette[Math.max(0, Math.min(palette.length - 1, idx))]);
+  }
+}
+P.cobblestone = (p) => stones(p, 9, pal('#6a6a6c', '#7a7a7c', '#8a8a8c', '#9a9a9c', '#a8a8aa'), hex('#3e3e40'), hex('#4c4c4e'));
+P.gravel = (p) => stones(p, 15, pal('#5e5856', '#6f6865', '#7f7774', '#8f8784', '#a09793'), hex('#4a4442'), hex('#534c4a'));
+
+function planks16(p, c) {
+  for (let board = 0; board < 4; board++) {
+    const seamX = board % 2 ? 4 : 12;
+    for (let yy = 0; yy < 4; yy++) {
+      const y = board * 4 + yy;
+      for (let x = 0; x < 16; x++) {
+        let col = yy === 3 ? c.seam : yy === 0 ? c.hi : p.r() < 0.5 ? c.a : c.b;
+        if (yy > 0 && yy < 3 && p.r() < 0.12) col = c.lo;
+        if (x === seamX && yy < 3) col = c.seam;
+        p.set(x, y, col);
+      }
+      // grain streaks
+      if (yy === 1 || yy === 2) { const sx = Math.floor(p.r() * 12), l = 3 + Math.floor(p.r() * 4); for (let k = 0; k < l; k++) if ((sx + k) % 16 !== seamX) p.set((sx + k) % 16, y, c.lo); }
+    }
+  }
+}
+P.oak_planks = (p) => planks16(p, OAKP);
+P.spruce_planks = (p) => planks16(p, { hi: hex('#856038'), a: hex('#76532f'), b: hex('#6b4a29'), lo: hex('#5a3d21'), seam: hex('#3e2914') });
+P.birch_planks = (p) => planks16(p, { hi: hex('#d8c98d'), a: hex('#cdbc80'), b: hex('#c2b075'), lo: hex('#ad9a62'), seam: hex('#8f7c48') });
+P.jungle_planks = (p) => planks16(p, { hi: hex('#bb8a62'), a: hex('#ad7c55'), b: hex('#a0704b'), lo: hex('#8a5e3d'), seam: hex('#6a4528') });
+
+function bark16(p, palette) {
+  for (let x = 0; x < 16; x++) {
+    let ci = Math.floor(p.r() * palette.length);
+    for (let y = 0; y < 16; y++) {
+      if (p.r() < 0.18) ci = Math.max(0, Math.min(palette.length - 1, ci + (p.r() < 0.5 ? 1 : -1)));
+      p.set(x, y, palette[x % 4 === 0 && p.r() < 0.7 ? 0 : ci]);
+    }
+  }
+}
+function rings16(p, inner, bark) {
+  for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+    const r = Math.max(Math.abs(x - 7.5), Math.abs(y - 7.5));
+    if (r > 6.5) { p.set(x, y, bark[Math.floor(p.r() * bark.length)]); continue; }
+    const ring = Math.floor(r) % 2;
+    p.set(x, y, inner[ring === 0 ? (p.r() < 0.85 ? 1 : 2) : 0]);
+  }
+}
+P.oak_log = (p) => bark16(p, pal('#3f2e1a', '#4f3a22', '#5d452a', '#6a5032'));
+P.oak_log_top = (p) => rings16(p, pal('#8a6a3b', '#b08b55', '#bf9a63'), pal('#4f3a22', '#5d452a'));
+P.spruce_log = (p) => bark16(p, pal('#22170c', '#2e2012', '#3a2a18', '#46331e'));
+P.spruce_log_top = (p) => rings16(p, pal('#5a3d21', '#76532f', '#856038'), pal('#2e2012', '#3a2a18'));
+P.birch_log = (p) => {
+  paint16(p, texel(p, pal('#c9c5b8', '#d8d5ca', '#e4e2da', '#efede7'), 0.6, 1));
+  for (let i = 0; i < 9; i++) { const x = Math.floor(p.r() * 14), y = Math.floor(p.r() * 16), l = 1 + Math.floor(p.r() * 3); for (let k = 0; k < l; k++) p.set(x + k, y, hex(k === 0 ? '#24201c' : '#3a3530')); }
+};
+P.birch_log_top = (p) => rings16(p, pal('#b8a26a', '#d2bf86', '#ddcc96'), pal('#d8d5ca', '#e4e2da'));
+function leaves16(p, palette, holes = 0.14) {
+  const cols = texel(p, palette, 0.55, 1);
+  for (let i = 0; i < 256; i++) if (p.r() < holes) cols[i] = null;
+  p.clear();
+  paint16(p, cols);
+}
+P.oak_leaves = (p) => leaves16(p, pal('#1f4f14', '#2a6219', '#36741f', '#428627', '#529a31'));
+P.birch_leaves = (p) => leaves16(p, pal('#3a6a26', '#4a7e30', '#5a923a', '#6aa446', '#7ab452'));
+P.spruce_leaves = (p) => leaves16(p, pal('#16301a', '#1f3f22', '#294e2b', '#335d34'));
+P.jungle_leaves = (p) => leaves16(p, pal('#24601a', '#2f7521', '#3b8a2a', '#4aa034', '#5ab43f'), 0.08);
+
+function bricks16(p, rowH, joints, fill, mortar, hi, lo) {
+  for (let y = 0; y < 16; y++) {
+    const row = Math.floor(y / rowH), yy = y % rowH;
+    for (let x = 0; x < 16; x++) {
+      const jx = joints[row % joints.length];
+      if (yy === rowH - 1 || jx.includes(x)) { p.set(x, y, mortar); continue; }
+      let c = fill[Math.floor(p.r() * fill.length)];
+      if (yy === 0 || jx.includes(x - 1)) c = hi;
+      else if (yy === rowH - 2 || jx.includes(x + 1)) c = lo;
+      p.set(x, y, c);
+    }
+  }
+}
+P.stone_bricks = (p) => bricks16(p, 8, [[7, 15], [3, 11]], pal('#7c7c7e', '#868688', '#909092', '#828284'), hex('#4e4e50'), hex('#a4a4a6'), hex('#6a6a6c'));
+P.bricks = (p) => bricks16(p, 4, [[7, 15], [3, 11]], pal('#963f2e', '#a24834', '#8c3a2a', '#ab5039'), hex('#b8b0a4'), hex('#b85c44'), hex('#7a3224'));
+P.smooth_stone = (p) => {
+  paint16(p, texel(p, pal('#9a9a9c', '#a2a2a4', '#aaaaac'), 0.5, 1));
+  for (let i = 0; i < 16; i++) { p.set(i, 0, hex('#b6b6b8')); p.set(0, i, hex('#b6b6b8')); p.set(i, 15, hex('#78787a')); p.set(15, i, hex('#78787a')); }
+};
+function metal16(p, base, light, dark, shine) {
+  for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+    let c = base;
+    if (x === 0 || y === 0) c = light; else if (x === 15 || y === 15) c = dark;
+    else if ((x + y) % 7 === 0 && x > 2 && y > 2) c = shine;
+    else if (p.r() < 0.12) c = shade(base, 0.94);
+    p.set(x, y, c);
+  }
+  for (const [x, y] of [[2, 2], [3, 2], [2, 3]]) p.set(x, y, shine);
+}
+P.gold_block = (p) => metal16(p, hex('#f2c62e'), hex('#fde78a'), hex('#b8860f'), hex('#fff4b8'));
+P.iron_block = (p) => metal16(p, hex('#d2d2d2'), hex('#f0f0f0'), hex('#9a9a9a'), hex('#ffffff'));
+P.diamond_block = (p) => metal16(p, hex('#56dcd2'), hex('#a8f4ee'), hex('#2a9a92'), hex('#e0fffc'));
+P.water = (p) => {
+  const cols = texel(p, pal('#2a5cc0', '#2f68cc', '#3574d6', '#3d80de'), 0.35, 2);
+  for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+    let c = cols[y * 16 + x];
+    if ((x + Math.floor(y * 2.3)) % 9 === 0 && p.r() < 0.6) c = hex('#5a9aea');
+    const o = [c[0], c[1], c[2], 175];
+    p.set(x, y, o);
+  }
+};
+P.pumpkin_side = (p) => {
+  for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+    const rib = x % 4 === 0;
+    let c = rib ? hex('#a65a0e') : x % 4 === 2 ? hex('#e08c22') : hex('#d17b16');
+    if (y === 0) c = shade(c, 1.1); if (y === 15) c = shade(c, 0.8);
+    if (!rib && p.r() < 0.12) c = hex('#c26f12');
+    p.set(x, y, c);
+  }
+};
+P.pumpkin_top = (p) => { paint16(p, texel(p, pal('#b8650f', '#c87314', '#d17b16', '#dc8a22'), 0.5)); for (const [x, y] of [[7, 6], [8, 6], [7, 7], [8, 7], [7, 8]]) p.set(x, y, hex('#5a4a1a')); };
+P.hay_side = (p) => {
+  for (let x = 0; x < 16; x++) { const base = pal('#b8952c', '#c4a338', '#cfb044', '#a8862a')[Math.floor(p.r() * 4)]; for (let y = 0; y < 16; y++) p.set(x, y, p.r() < 0.15 ? shade(base, 0.85) : base); }
+  for (const y of [2, 3, 12, 13]) for (let x = 0; x < 16; x++) p.set(x, y, y % 2 ? hex('#6a2c14') : hex('#8a3a1e'));
+};
+P.hay_top = (p) => { paint16(p, texel(p, pal('#9a7a22', '#b8952c', '#c4a338', '#d4b54c'), 0.6, 1)); };
+
 // ---------- atlas build ----------
 export function tileIndex(name) {
   const i = tiles.get(name);

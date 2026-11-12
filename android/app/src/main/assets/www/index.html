@@ -11,6 +11,72 @@
 <div id="game"></div>
 <div id="arena"></div>
 
+
+<div id="home" class="hidden">
+  <div id="h-top">
+    <div class="h-player">
+      <div class="h-lvbadge"><b id="h-lv">1</b></div>
+      <div class="h-pinfo"><span id="h-name">Spieler</span><div class="h-xp"><i id="h-xpfill"></i><span id="h-xptext">0/20</span></div></div>
+    </div>
+    <div class="h-res"><div class="h-pill gold">🪙 <b id="h-gold">0</b></div><div class="h-pill troph">🏆 <b id="h-troph">0</b></div></div>
+  </div>
+  <div id="h-viewport">
+    <div id="h-pages">
+      <section class="h-page" id="tab-cards">
+        <div class="h-panel">
+          <div class="h-ptitle">Kampfdeck <span>Ø <b id="h-avg">3.0</b> ⚡</span></div>
+          <div id="h-swaphint" class="h-swaphint hidden">Tippe auf eine Deck-Karte zum Tauschen</div>
+          <div id="h-deck" class="h-deck"></div>
+        </div>
+        <div class="h-panel">
+          <div class="h-ptitle">Sammlung <span>Gefunden: <b id="h-found">0/0</b></span></div>
+          <div id="h-coll" class="h-coll"></div>
+        </div>
+      </section>
+      <section class="h-page" id="tab-battle">
+        <h1 id="h-logo" class="h-logo">CLASHCRAFT</h1>
+        <div id="h-arenabanner" class="h-arena theme-meadow">
+          <span id="h-arenanum">Arena 1</span><b id="h-arenaname">Wiesental</b>
+          <div class="h-road"><i id="h-roadfill"></i></div><small id="h-next"></small>
+        </div>
+        <div class="h-spacer"></div>
+        <button id="h-free" class="h-free"></button>
+        <button id="h-fight" class="h-fight"><span>⚔ KAMPF</span></button>
+        <button id="h-diff" class="h-diff">Gegner: Normal</button>
+        <div id="h-chests" class="h-chests"></div>
+      </section>
+      <section class="h-page" id="tab-road">
+        <div class="h-ptitle center">Pokalpfad</div>
+        <div id="h-roadlist" class="h-roadlist"></div>
+      </section>
+      <section class="h-page" id="tab-more">
+        <div class="h-panel">
+          <div class="h-ptitle">Profil</div>
+          <label>Spielername<input id="mo-name" maxlength="16"></label>
+          <div id="mo-stats" class="mo-stats"></div>
+        </div>
+        <div class="h-panel">
+          <div class="h-ptitle">Weitere Spielmodi</div>
+          <button class="btn" id="mo-sandbox">🧱 Blockwelt (Sandbox: Bauen &amp; Überleben)</button>
+          <button class="btn" id="mo-settings">⚙ Einstellungen</button>
+          <div class="mo-ver">ClashCraft · eigenes Fan-Projekt · alle Grafiken selbst erzeugt</div>
+        </div>
+      </section>
+    </div>
+  </div>
+  <nav id="h-nav">
+    <button><i>🃏</i><span>Karten</span></button>
+    <button class="on"><i>⚔️</i><span>Kampf</span></button>
+    <button><i>🏆</i><span>Arenen</span></button>
+    <button><i>☰</i><span>Mehr</span></button>
+  </nav>
+  <div id="h-toast"></div>
+  <div id="h-levelup" class="hidden"></div>
+</div>
+
+<div id="carddetail" class="hidden"><div id="cd-body" class="cd-box"></div></div>
+<div id="chestopen" class="hidden"><div class="co-rays"></div><div id="co-stage"></div></div>
+
 <div id="arenahud" class="hidden">
   <div id="ar-bars"></div>
   <div id="ar-top">
@@ -19,6 +85,8 @@
     <div class="ar-side right"><span class="lbl blue">Du</span><div id="ar-crowns-me" class="crowns"></div></div>
   </div>
   <button id="ar-quit" class="tbtn small">✕</button>
+  <div id="ar-arenaname"></div>
+  <div id="ar-count" class="hidden"></div>
   <div id="ar-toast"></div>
   <div id="ar-panel">
     <div id="ar-nextwrap"><span>Nächste</span><div id="ar-next"></div></div>
@@ -33,36 +101,14 @@
       <div id="ar-endcrowns" class="crowns big"></div>
       <div id="ar-endtroph"></div>
       <div class="btnrow">
-        <button class="btn" id="ar-again">Nochmal kämpfen</button>
-        <button class="btn" id="ar-menu">Zur Arena</button>
+        <button class="btn" id="ar-menu">Weiter</button>
+        <button class="btn arena-btn" id="ar-again">Nochmal</button>
       </div>
     </div>
   </div>
 </div>
 
-<div id="arenamenu" class="menu hidden">
-  <div class="menubg"></div>
-  <div class="menuinner">
-    <h1 class="logo small">BLOCK-ARENA</h1>
-    <div class="trophies">🏆 <b id="am-troph">0</b> Pokale</div>
-    <div id="am-deckprev" class="deckprev"></div>
-    <button class="btn arena-btn" id="am-fight">⚔ Kampf starten</button>
-    <button class="btn toggle" id="am-diff">Gegner: Normal</button>
-    <button class="btn" id="am-deck">Deck bearbeiten</button>
-    <button class="btn" id="am-back">Zurück</button>
-    <div class="hint">Ziehe Karten aufs Spielfeld (oder Karte antippen, dann Feld antippen). Zerstöre die gegnerischen Türme!</div>
-  </div>
-</div>
 
-<div id="deckmenu" class="menu hidden">
-  <div class="menubg"></div>
-  <div class="menuinner wide">
-    <h2>Dein Deck <span id="dk-count">8/8</span> · Ø Energie <span id="dk-avg">3.0</span></h2>
-    <div id="dk-info" class="dk-info">Tippe Karten an, um sie ins Deck zu legen oder herauszunehmen (genau 8).</div>
-    <div id="dk-grid" class="dk-grid"></div>
-    <button class="btn" id="dk-done">Fertig</button>
-  </div>
-</div>
 
 <div id="hud" class="hidden">
   <div id="vignette"></div>
@@ -93,17 +139,6 @@
 
 <div id="screen" class="overlay hidden"><div id="panel"></div></div>
 
-<div id="mainmenu" class="menu">
-  <div class="menubg"></div>
-  <div class="menuinner">
-    <h1 class="logo">CLASHCRAFT</h1>
-    <div class="splash">Baue deine eigene Welt!</div>
-    <button class="btn" id="mm-play">Spielen</button>
-    <button class="btn arena-btn" id="mm-arena">⚔ Block-Arena (Kartenkampf)</button>
-    <button class="btn" id="mm-settings">Einstellungen</button>
-    <div class="version">Version 1.0 · Eigenes Voxel-Sandbox-Spiel</div>
-  </div>
-</div>
 
 <div id="worldlist" class="menu hidden">
   <div class="menubg"></div>
